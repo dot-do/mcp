@@ -36,7 +36,9 @@
     "check": "tsc --noEmit",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build && npm test",
-    "test": "vitest run",
+    "test": "npm run test:workers && npm run test:node",
+    "test:workers": "vitest run",
+    "test:node": "vitest run --config vitest.node.config.ts",
     "test:watch": "vitest"
   },
   "keywords": [
@@ -69,6 +71,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.8.0",
     "@cloudflare/workers-types": "^4.20260124.0",
     "typescript": "^5.9.3",
     "vitest": "^2.0.0"

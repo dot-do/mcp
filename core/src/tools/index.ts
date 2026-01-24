@@ -29,7 +29,9 @@ export {
   type DoResult,
   type DoError,
   type DoOptions,
-  type LegacyDoResult
+  type DoOptionsWithEnv,
+  type LegacyDoResult,
+  type SandboxEnv
 } from './do.js'
 
 // Binding proxy

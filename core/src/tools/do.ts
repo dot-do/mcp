@@ -3,10 +3,17 @@
  *
  * MCP tool for executing code in a sandboxed V8 environment using ai-evaluate.
  * Provides access to configured bindings while maintaining security.
+ *
+ * Requires the worker_loaders binding (LOADER) to be configured in wrangler.
+ * In production, ai-evaluate spawns isolated V8 sub-workers for each execution.
  */
 
 import { evaluate } from 'ai-evaluate'
+import type { SandboxEnv } from 'ai-evaluate'
 import type { DoScope } from '../scope/types.js'
+
+// Re-export SandboxEnv for consumers
+export type { SandboxEnv }
 
 /**
  * Tool definition for the do tool
@@ -79,18 +86,29 @@ export interface DoOptions {
 /**
  * Creates a do handler function that executes code in a sandboxed environment
  *
+ * Uses ai-evaluate with the worker_loaders binding (LOADER) to spawn isolated
+ * V8 sub-workers for secure code execution.
+ *
+ * - In Cloudflare Workers: Pass env with LOADER binding (from cloudflare:workers)
+ * - In Node.js/testing: ai-evaluate falls back to Miniflare automatically
+ *
  * @param scope - The DoScope configuration with bindings and types
+ * @param env - Optional worker environment with LOADER binding
  * @returns Handler function for the do tool
  */
 export function createDoHandler(
-  scope: DoScope
+  scope: DoScope,
+  env?: SandboxEnv
 ): (input: DoInput) => Promise<ToolResponse> {
   return async (input: DoInput): Promise<ToolResponse> => {
     try {
+      // ai-evaluate uses LOADER if available, falls back to Miniflare in Node.js
       const result = await evaluate({
         script: input.code,
-        timeout: scope.timeout
-      })
+        timeout: scope.timeout,
+        fetch: scope.permissions?.allowNetwork ? undefined : null, // Block network unless allowed
+        rpc: scope.bindings, // Pass domain bindings via RPC
+      }, env)
 
       const doResult: DoResult = {
         success: result.success,
@@ -130,47 +148,39 @@ export function createDoHandler(
 }
 
 /**
+ * Options for executeDo with optional environment
+ */
+export interface DoOptionsWithEnv extends DoOptions {
+  env?: SandboxEnv
+}
+
+/**
  * Execute code in a sandboxed environment (legacy API)
  *
- * This function runs the provided code in a V8 isolate with only
- * the bindings from the scope available. No ambient capabilities
- * like filesystem, network, or environment variables are accessible.
- *
- * @param options - The code and scope to execute with
+ * @deprecated Use createDoHandler instead. This is kept for backward compatibility.
+ * @param options - The code, scope, and optional env to execute with
  * @returns Result of the execution or error
  */
-export async function executeDo(options: DoOptions): Promise<LegacyDoResult | DoError> {
-  const { code, scope } = options
+export async function executeDo(options: DoOptionsWithEnv): Promise<LegacyDoResult | DoError> {
+  const { code, scope, env } = options
   const startTime = Date.now()
-  const consoleOutput: string[] = []
 
   try {
-    // Create a sandbox with only the provided bindings
-    const sandbox = {
-      ...scope.bindings,
-      console: {
-        log: (...args: unknown[]) => consoleOutput.push(args.map(String).join(' ')),
-        error: (...args: unknown[]) => consoleOutput.push(`[ERROR] ${args.map(String).join(' ')}`),
-        warn: (...args: unknown[]) => consoleOutput.push(`[WARN] ${args.map(String).join(' ')}`),
-        info: (...args: unknown[]) => consoleOutput.push(`[INFO] ${args.map(String).join(' ')}`)
-      }
-    }
+    // ai-evaluate uses LOADER if available, falls back to Miniflare in Node.js
+    const result = await evaluate({
+      script: code,
+      timeout: scope.timeout,
+      fetch: scope.permissions?.allowNetwork ? undefined : null,
+      rpc: scope.bindings,
+    }, env)
 
-    // Wrap code in async function to support top-level await
-    const wrappedCode = `
-      (async () => {
-        ${code}
-      })()
-    `
-
-    // Create function with sandbox as scope
-    // In production, this uses ai-evaluate for proper V8 isolate
-    // For now, we use a basic implementation
-    const fn = new Function(...Object.keys(sandbox), `return ${wrappedCode}`)
-    const result = await fn(...Object.values(sandbox))
+    // Convert to legacy format
+    const consoleOutput = result.logs?.map(log =>
+      log.level === 'log' ? log.message : `[${log.level.toUpperCase()}] ${log.message}`
+    ) || []
 
     return {
-      result,
+      result: result.value,
       console: consoleOutput,
       executionTime: Date.now() - startTime
     }
@@ -187,9 +197,10 @@ export async function executeDo(options: DoOptions): Promise<LegacyDoResult | Do
 
 /**
  * Create a do tool handler (legacy API)
+ * @deprecated Use createDoHandler instead
  */
-export function createDoTool(scope: DoScope) {
+export function createDoTool(scope: DoScope, env: SandboxEnv) {
   return async (code: string): Promise<LegacyDoResult | DoError> => {
-    return executeDo({ code, scope })
+    return executeDo({ code, scope, env })
   }
 }

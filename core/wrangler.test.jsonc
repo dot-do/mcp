@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler.json",
+  "name": "mcp-core-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Dynamic Worker Loader for ai-evaluate sandboxed execution
+  "worker_loaders": [
+    {
+      "binding": "LOADER"
+    }
+  ]
+}

@@ -9,6 +9,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { z } from 'zod'
 import { evaluate } from 'ai-evaluate'
+import type { SandboxEnv } from 'ai-evaluate'
 import type { MCPServerConfig } from './types.js'
 
 /**
@@ -19,6 +20,8 @@ export interface CreateMCPServerOptions {
   name?: string
   /** Server version (default: '1.0.0') */
   version?: string
+  /** Worker environment with LOADER binding for sandboxed code execution */
+  env?: SandboxEnv
 }
 
 /**
@@ -50,7 +53,7 @@ export function createMCPServer(
   config: MCPServerConfig,
   options: CreateMCPServerOptions = {}
 ): MCPServerWrapper {
-  const { name = 'mcp-server', version = '0.1.0' } = options
+  const { name = 'mcp-server', version = '0.1.0', env: sandboxEnv } = options
   const { search, fetch, do: doScope } = config
   // auth will be used when implementing authentication middleware
   // const { auth } = config
@@ -170,13 +173,13 @@ ${doScope.types}`,
       const startTime = Date.now()
 
       try {
+        // ai-evaluate uses LOADER if available, falls back to Miniflare in Node.js
         const result = await evaluate({
           script: args.code as string,
           timeout: doScope.timeout,
-          // Note: bindings need to be injected via a different mechanism
-          // For now, bindings are available through sdk config
-          sdk: typeof doScope.bindings === 'object' ? { ...doScope.bindings as Record<string, unknown> } : undefined,
-        })
+          fetch: doScope.permissions?.allowNetwork ? undefined : null,
+          rpc: doScope.bindings, // Pass domain bindings via RPC
+        }, sandboxEnv)
 
         const duration = Date.now() - startTime
 
@@ -184,9 +187,15 @@ ${doScope.types}`,
           content: [
             {
               type: 'text' as const,
-              text: JSON.stringify({ result, duration }, null, 2),
+              text: JSON.stringify({
+                success: result.success,
+                value: result.value,
+                logs: result.logs,
+                duration,
+              }, null, 2),
             },
           ],
+          isError: !result.success,
         }
       } catch (error) {
         const duration = Date.now() - startTime
@@ -211,14 +220,21 @@ ${doScope.types}`,
   toolHandlers.set('do', async (args) => {
     const startTime = Date.now()
 
+    // ai-evaluate uses LOADER if available, falls back to Miniflare in Node.js
     const result = await evaluate({
       script: args.code as string,
       timeout: doScope.timeout,
-      sdk: typeof doScope.bindings === 'object' ? { ...doScope.bindings as Record<string, unknown> } : undefined,
-    })
+      fetch: doScope.permissions?.allowNetwork ? undefined : null,
+      rpc: doScope.bindings,
+    }, sandboxEnv)
 
     const duration = Date.now() - startTime
-    return { result, duration }
+    return {
+      success: result.success,
+      value: result.value,
+      logs: result.logs,
+      duration,
+    }
   })
 
   return {

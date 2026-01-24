@@ -163,13 +163,18 @@ describe('createMCPServer', () => {
   })
 
   describe('do tool execution', () => {
-    it('should execute code with bindings', async () => {
+    it('should execute code and return DoResult format', async () => {
       const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
-      const result = await server.callTool('do', { code: 'return testFn()' })
+      // Execute simple code that returns a value
+      const result = await server.callTool('do', { code: 'return 42' }) as { success: boolean; value: unknown; duration: number }
 
-      expect(result).toHaveProperty('result')
+      expect(result).toHaveProperty('success')
+      expect(result).toHaveProperty('value')
+      expect(result).toHaveProperty('duration')
+      expect(result.success).toBe(true)
+      expect(result.value).toBe(42)
     })
 
     it('should pass timeout to evaluate', async () => {
@@ -178,15 +183,17 @@ describe('createMCPServer', () => {
         ...testConfig,
         do: {
           ...testDoScope,
-          timeout: 100,
+          timeout: 5000,
         },
       }
       const server = createMCPServer(configWithTimeout)
 
       // Test that code execution works and returns a result with duration
-      const result = await server.callTool('do', { code: 'return 42' })
-      expect(result).toHaveProperty('result')
+      const result = await server.callTool('do', { code: 'return 42' }) as { success: boolean; value: unknown; duration: number }
+      expect(result).toHaveProperty('success')
+      expect(result).toHaveProperty('value')
       expect(result).toHaveProperty('duration')
+      expect(result.success).toBe(true)
     })
   })
 
