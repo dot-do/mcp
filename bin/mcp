@@ -1,0 +1,90 @@
+#!/usr/bin/env node
+
+/**
+ * MCP Server CLI
+ *
+ * Command-line interface for starting MCP servers.
+ */
+
+import { parseArgs, getHelpText, getVersion, validateArgs, loadTemplate } from '../dist/cli/args.js'
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2))
+
+  // Handle --help
+  if (args.help) {
+    console.log(getHelpText())
+    process.exit(0)
+  }
+
+  // Handle --version
+  if (args.version) {
+    console.log(getVersion())
+    process.exit(0)
+  }
+
+  // Validate arguments
+  const errors = validateArgs(args)
+  if (errors.length > 0) {
+    console.error('Error:', errors.join('\n'))
+    console.error('\nRun "mcp --help" for usage information.')
+    process.exit(1)
+  }
+
+  // Load template if specified
+  let config = {}
+  if (args.template) {
+    const template = await loadTemplate(args.template)
+    if (!template) {
+      console.error(`Error: Failed to load template "${args.template}"`)
+      process.exit(1)
+    }
+    config = template
+  }
+
+  // Load config file if specified
+  if (args.config) {
+    try {
+      const { default: userConfig } = await import(args.config)
+      config = { ...config, ...userConfig }
+    } catch (error) {
+      console.error(`Error: Failed to load config file "${args.config}"`)
+      console.error(error instanceof Error ? error.message : String(error))
+      process.exit(1)
+    }
+  }
+
+  // Import server components
+  const { createMCPServer } = await import('../dist/core/server.js')
+
+  // Create the server
+  const server = createMCPServer(config)
+
+  // Start with appropriate transport
+  if (args.stdio) {
+    // Stdio transport for Claude Desktop integration
+    console.error('Starting MCP server with stdio transport...')
+
+    // Import and start stdio transport
+    const { connectStdio } = await import('../dist/transports/stdio.js')
+    await connectStdio(server)
+  } else if (args.http) {
+    // HTTP transport for web deployment
+    console.log(`Starting MCP server on http://localhost:${args.port}`)
+
+    // For HTTP mode, we'd typically use the Hono app
+    // This is a simplified version - full implementation would use the worker
+    const { serve } = await import('@hono/node-server')
+    const { default: app } = await import('../dist/worker/index.js')
+
+    serve({
+      fetch: app.fetch,
+      port: args.port,
+    })
+  }
+}
+
+main().catch((error) => {
+  console.error('Fatal error:', error)
+  process.exit(1)
+})

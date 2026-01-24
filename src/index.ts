@@ -6,10 +6,11 @@
  */
 
 // Core types
-export * from './core/types.js'
+export * from './types.js'
 
-// Server
-export * from './server.js'
+// Server factory
+export { createMCPServer } from './server.js'
+export type { MCPServerWrapper, CreateMCPServerOptions } from './server.js'
 
 // Auth
 export * from './auth/index.js'

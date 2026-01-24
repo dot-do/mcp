@@ -67,13 +67,13 @@ describe('MCPServerConfig types', () => {
         types: '',
         timeout: 5000,
         permissions: {
-          allowNet: true,
-          allowEnv: false,
+          allowNetwork: true,
+          allowedHosts: ['example.com'],
         },
       };
 
       expect(doScope.timeout).toBe(5000);
-      expect(doScope.permissions?.allowNet).toBe(true);
+      expect(doScope.permissions?.allowNetwork).toBe(true);
     });
   });
 
@@ -97,25 +97,24 @@ describe('MCPServerConfig types', () => {
       const auth: AuthConfig = {
         mode: 'auth-required',
         oauth: {
+          introspectionUrl: 'https://auth.example.com/introspect',
           clientId: 'test-client',
-          issuer: 'https://auth.example.com',
         },
       };
 
+      expect(auth.oauth?.introspectionUrl).toBe('https://auth.example.com/introspect');
       expect(auth.oauth?.clientId).toBe('test-client');
-      expect(auth.oauth?.issuer).toBe('https://auth.example.com');
     });
 
     it('should allow optional apiKey config', () => {
       const auth: AuthConfig = {
         mode: 'auth-required',
         apiKey: {
-          header: 'X-API-Key',
-          prefix: 'Bearer ',
+          verifyUrl: 'https://api.example.com/verify',
         },
       };
 
-      expect(auth.apiKey?.header).toBe('X-API-Key');
+      expect(auth.apiKey?.verifyUrl).toBe('https://api.example.com/verify');
     });
   });
 
@@ -182,14 +181,12 @@ describe('MCPServerConfig types', () => {
   describe('DoPermissions interface', () => {
     it('should define permission flags', () => {
       const permissions: DoPermissions = {
-        allowNet: true,
-        allowEnv: false,
-        allowFs: false,
-        allowRun: false,
+        allowNetwork: true,
+        allowedHosts: ['example.com', 'api.example.com'],
       };
 
-      expect(permissions.allowNet).toBe(true);
-      expect(permissions.allowEnv).toBe(false);
+      expect(permissions.allowNetwork).toBe(true);
+      expect(permissions.allowedHosts).toEqual(['example.com', 'api.example.com']);
     });
   });
 
@@ -287,45 +284,33 @@ describe('MCPServerConfig types', () => {
   });
 
   describe('OAuthConfig interface', () => {
-    it('should require clientId and issuer', () => {
+    it('should require introspectionUrl', () => {
       const oauth: OAuthConfig = {
+        introspectionUrl: 'https://auth.example.com/introspect',
+      };
+
+      expect(oauth.introspectionUrl).toBe('https://auth.example.com/introspect');
+    });
+
+    it('should allow optional clientId and clientSecret', () => {
+      const oauth: OAuthConfig = {
+        introspectionUrl: 'https://auth.example.com/introspect',
         clientId: 'my-client-id',
-        issuer: 'https://auth.example.com',
+        clientSecret: 'my-secret',
       };
 
       expect(oauth.clientId).toBe('my-client-id');
-      expect(oauth.issuer).toBe('https://auth.example.com');
-    });
-
-    it('should allow optional scopes and audience', () => {
-      const oauth: OAuthConfig = {
-        clientId: 'my-client-id',
-        issuer: 'https://auth.example.com',
-        scopes: ['read', 'write'],
-        audience: 'https://api.example.com',
-      };
-
-      expect(oauth.scopes).toEqual(['read', 'write']);
-      expect(oauth.audience).toBe('https://api.example.com');
+      expect(oauth.clientSecret).toBe('my-secret');
     });
   });
 
   describe('ApiKeyConfig interface', () => {
-    it('should require header', () => {
+    it('should require verifyUrl', () => {
       const apiKey: ApiKeyConfig = {
-        header: 'X-API-Key',
+        verifyUrl: 'https://api.example.com/verify',
       };
 
-      expect(apiKey.header).toBe('X-API-Key');
-    });
-
-    it('should allow optional prefix', () => {
-      const apiKey: ApiKeyConfig = {
-        header: 'Authorization',
-        prefix: 'Bearer ',
-      };
-
-      expect(apiKey.prefix).toBe('Bearer ');
+      expect(apiKey.verifyUrl).toBe('https://api.example.com/verify');
     });
   });
 });

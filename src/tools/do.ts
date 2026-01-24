@@ -1,50 +1,136 @@
 /**
- * Do Tool - Sandboxed Code Execution
+ * Do Tool
  *
- * The "do" tool executes code in a V8 isolate sandbox with only
- * explicitly provided bindings available.
+ * MCP tool for executing code in a sandboxed V8 environment using ai-evaluate.
+ * Provides access to configured bindings while maintaining security.
  */
 
+import { evaluate } from 'ai-evaluate'
 import type { DoScope } from '../scope/types.js'
 
 /**
- * Result of a do tool execution
+ * Tool definition for the do tool
+ */
+export const doTool = {
+  name: 'do',
+  description: 'Execute code in a sandboxed environment with access to configured bindings',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      code: { type: 'string', description: 'TypeScript/JavaScript code to execute' }
+    },
+    required: ['code']
+  }
+} as const
+
+/**
+ * Input parameters for the do handler
+ */
+export interface DoInput {
+  code: string
+}
+
+/**
+ * MCP tool response format
+ */
+export interface ToolResponse {
+  content: Array<{ type: string; text: string }>
+  isError?: boolean
+}
+
+/**
+ * Result from the do tool execution
  */
 export interface DoResult {
-  /** Return value from the executed code */
+  success: boolean
+  value?: unknown
+  logs: Array<{ level: string; message: string; timestamp: number }>
+  error?: string
+  duration: number
+}
+
+/**
+ * Legacy result interface (for backwards compatibility)
+ */
+export interface LegacyDoResult {
   result: unknown
-  /** Console output captured during execution */
   console: string[]
-  /** Execution time in milliseconds */
   executionTime: number
 }
 
 /**
- * Error from a do tool execution
+ * Legacy error interface (for backwards compatibility)
  */
 export interface DoError {
-  /** Error message */
   message: string
-  /** Stack trace if available */
   stack?: string
-  /** Line number where error occurred */
   line?: number
-  /** Column number where error occurred */
   column?: number
 }
 
 /**
- * Options for the do tool
+ * Legacy options interface (for backwards compatibility)
  */
 export interface DoOptions {
-  /** Code to execute */
   code: string
-  /** Scope with bindings and types */
   scope: DoScope
 }
 
 /**
- * Execute code in a sandboxed environment
+ * Creates a do handler function that executes code in a sandboxed environment
+ *
+ * @param scope - The DoScope configuration with bindings and types
+ * @returns Handler function for the do tool
+ */
+export function createDoHandler(
+  scope: DoScope
+): (input: DoInput) => Promise<ToolResponse> {
+  return async (input: DoInput): Promise<ToolResponse> => {
+    try {
+      const result = await evaluate({
+        script: input.code,
+        timeout: scope.timeout
+      })
+
+      const doResult: DoResult = {
+        success: result.success,
+        value: result.value,
+        logs: result.logs || [],
+        duration: result.duration
+      }
+
+      if (!result.success && result.error) {
+        doResult.error = result.error
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(doResult, null, 2)
+          }
+        ],
+        isError: !result.success
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred'
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ error: errorMessage })
+          }
+        ],
+        isError: true
+      }
+    }
+  }
+}
+
+/**
+ * Execute code in a sandboxed environment (legacy API)
  *
  * This function runs the provided code in a V8 isolate with only
  * the bindings from the scope available. No ambient capabilities
@@ -53,7 +139,7 @@ export interface DoOptions {
  * @param options - The code and scope to execute with
  * @returns Result of the execution or error
  */
-export async function executeDo(options: DoOptions): Promise<DoResult | DoError> {
+export async function executeDo(options: DoOptions): Promise<LegacyDoResult | DoError> {
   const { code, scope } = options
   const startTime = Date.now()
   const consoleOutput: string[] = []
@@ -100,10 +186,10 @@ export async function executeDo(options: DoOptions): Promise<DoResult | DoError>
 }
 
 /**
- * Create a do tool handler
+ * Create a do tool handler (legacy API)
  */
 export function createDoTool(scope: DoScope) {
-  return async (code: string): Promise<DoResult | DoError> => {
+  return async (code: string): Promise<LegacyDoResult | DoError> => {
     return executeDo({ code, scope })
   }
 }
