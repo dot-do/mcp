@@ -1,140 +1,420 @@
 /**
  * Memory Template
  *
- * Pre-built scope for in-memory key-value storage.
+ * Pre-built configuration for knowledge graph / memory agents.
+ * Provides entity, relation, and observation management with search capabilities.
  */
 
+import type { MCPServerConfig, SearchResult, FetchResult } from '../core/types.js'
 import type { DoScope } from '../scope/types.js'
 
 /**
- * Memory store interface
+ * Entity in the knowledge graph
+ */
+export interface Entity {
+  id: string
+  name: string
+  type: string
+  observations: Observation[]
+  metadata?: Record<string, unknown>
+}
+
+/**
+ * Relation between two entities
+ */
+export interface Relation {
+  id: string
+  sourceId: string
+  targetId: string
+  type: string
+  metadata?: Record<string, unknown>
+}
+
+/**
+ * Observation about an entity
+ */
+export interface Observation {
+  id: string
+  entityId: string
+  content: string
+  timestamp: Date
+  metadata?: Record<string, unknown>
+}
+
+/**
+ * Memory store interface for persistence
  */
 export interface MemoryStore {
-  /** Get a value by key */
-  get: (key: string) => Promise<unknown | undefined>
-  /** Set a value */
-  set: (key: string, value: unknown) => Promise<void>
-  /** Delete a value */
-  delete: (key: string) => Promise<boolean>
-  /** Check if a key exists */
-  has: (key: string) => Promise<boolean>
-  /** Get all keys */
-  keys: () => Promise<string[]>
-  /** Clear all values */
-  clear: () => Promise<void>
+  /** Get an entity by id */
+  getEntity: (id: string) => Promise<Entity | null>
+  /** Store an entity */
+  setEntity: (entity: Entity) => Promise<void>
+  /** Delete an entity */
+  deleteEntity: (id: string) => Promise<void>
+  /** Get a relation by id */
+  getRelation: (id: string) => Promise<Relation | null>
+  /** Store a relation */
+  setRelation: (relation: Relation) => Promise<void>
+  /** Delete a relation */
+  deleteRelation: (id: string) => Promise<void>
+  /** Search entities by query */
+  searchEntities: (query: string) => Promise<Entity[]>
+  /** Get all relations for an entity */
+  getRelationsForEntity: (entityId: string) => Promise<Relation[]>
+  /** Get all entities */
+  getAllEntities: () => Promise<Entity[]>
 }
 
 /**
- * Memory template options
+ * Options for configuring the memory template
  */
 export interface MemoryTemplateOptions {
-  /** Memory store instance (uses built-in Map if not provided) */
-  store?: MemoryStore
-  /** Whether to allow write operations */
-  allowWrites?: boolean
-  /** Timeout for memory operations in ms */
-  timeout?: number
+  /** Storage backend for persistence */
+  storage?: MemoryStore
 }
 
 /**
- * Type definitions for the memory scope
+ * Type definitions for memory template bindings
  */
-const MEMORY_TYPES = `
+export const MEMORY_TYPES = `
 /**
- * Get a value from memory storage
- * @param key - The key to look up
- * @returns The stored value or undefined if not found
+ * Entity in the knowledge graph
  */
-declare function get(key: string): Promise<unknown | undefined>;
+interface Entity {
+  id: string;
+  name: string;
+  type: string;
+  observations: Observation[];
+  metadata?: Record<string, unknown>;
+}
 
 /**
- * Store a value in memory
- * @param key - The key to store under
- * @param value - The value to store (must be JSON-serializable)
+ * Relation between two entities
  */
-declare function set(key: string, value: unknown): Promise<void>;
+interface Relation {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  type: string;
+  metadata?: Record<string, unknown>;
+}
 
 /**
- * Delete a value from memory
- * @param key - The key to delete
- * @returns True if the key existed and was deleted
+ * Observation about an entity
  */
-declare function del(key: string): Promise<boolean>;
+interface Observation {
+  id: string;
+  entityId: string;
+  content: string;
+  timestamp: Date;
+  metadata?: Record<string, unknown>;
+}
 
 /**
- * Check if a key exists in memory
- * @param key - The key to check
- * @returns True if the key exists
+ * Search result from memory search
  */
-declare function has(key: string): Promise<boolean>;
+interface SearchResult {
+  id: string;
+  title: string;
+  snippet?: string;
+  metadata?: Record<string, unknown>;
+}
 
 /**
- * Get all keys in memory storage
- * @returns Array of all keys
+ * Result from fetching an entity
  */
-declare function keys(): Promise<string[]>;
+interface FetchResult {
+  content: string;
+  contentType?: string;
+  metadata?: Record<string, unknown>;
+}
 
 /**
- * Clear all values from memory storage
+ * Search for entities in the knowledge graph
+ * @param query - Search query
+ * @returns Promise resolving to array of search results
  */
-declare function clear(): Promise<void>;
+declare function search(query: string): Promise<SearchResult[]>;
+
+/**
+ * Fetch an entity by id
+ * @param id - Entity id
+ * @returns Promise resolving to entity content
+ */
+declare function fetch(id: string): Promise<FetchResult>;
+
+/**
+ * Create a new entity in the knowledge graph
+ * @param name - Entity name
+ * @param type - Entity type (e.g., "person", "concept", "organization")
+ * @returns Promise resolving to the created entity
+ */
+declare function createEntity(name: string, type: string): Promise<Entity>;
+
+/**
+ * Create a relation between two entities
+ * @param sourceId - Source entity id
+ * @param targetId - Target entity id
+ * @param type - Relation type (e.g., "knows", "works_at", "related_to")
+ * @returns Promise resolving to the created relation
+ */
+declare function createRelation(sourceId: string, targetId: string, type: string): Promise<Relation>;
+
+/**
+ * Add an observation to an entity
+ * @param entityId - Entity id to add observation to
+ * @param content - Observation content
+ * @returns Promise resolving to the created observation
+ */
+declare function addObservation(entityId: string, content: string): Promise<Observation>;
+
+/**
+ * Search for entities by query
+ * @param query - Search query (matches name, type, or observations)
+ * @returns Promise resolving to matching entities
+ */
+declare function searchNodes(query: string): Promise<Entity[]>;
+
+/**
+ * Open multiple entities by their ids
+ * @param ids - Array of entity ids
+ * @returns Promise resolving to entities
+ */
+declare function openNodes(ids: string[]): Promise<Entity[]>;
 `
 
 /**
- * Create a simple in-memory store
+ * Generate a unique ID
  */
-export function createMemoryStore(): MemoryStore {
-  const data = new Map<string, unknown>()
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+}
+
+/**
+ * Create an in-memory store for testing and simple use cases
+ */
+export function createInMemoryStore(): MemoryStore {
+  const entities = new Map<string, Entity>()
+  const relations = new Map<string, Relation>()
 
   return {
-    async get(key: string) {
-      return data.get(key)
+    getEntity: async (id: string) => entities.get(id) || null,
+
+    setEntity: async (entity: Entity) => {
+      entities.set(entity.id, entity)
     },
-    async set(key: string, value: unknown) {
-      data.set(key, value)
+
+    deleteEntity: async (id: string) => {
+      entities.delete(id)
     },
-    async delete(key: string) {
-      return data.delete(key)
+
+    getRelation: async (id: string) => relations.get(id) || null,
+
+    setRelation: async (relation: Relation) => {
+      relations.set(relation.id, relation)
     },
-    async has(key: string) {
-      return data.has(key)
+
+    deleteRelation: async (id: string) => {
+      relations.delete(id)
     },
-    async keys() {
-      return Array.from(data.keys())
+
+    searchEntities: async (query: string) => {
+      const lowerQuery = query.toLowerCase()
+      return Array.from(entities.values()).filter(entity => {
+        // Match name
+        if (entity.name.toLowerCase().includes(lowerQuery)) return true
+        // Match type
+        if (entity.type.toLowerCase().includes(lowerQuery)) return true
+        // Match observations
+        if (entity.observations.some(obs =>
+          obs.content.toLowerCase().includes(lowerQuery)
+        )) return true
+        return false
+      })
     },
-    async clear() {
-      data.clear()
+
+    getRelationsForEntity: async (entityId: string) => {
+      return Array.from(relations.values()).filter(
+        rel => rel.sourceId === entityId || rel.targetId === entityId
+      )
     },
+
+    getAllEntities: async () => Array.from(entities.values())
   }
 }
 
 /**
- * Create a memory scope template
- *
- * @param options - Memory template options
- * @returns DoScope configured for memory operations
+ * Create a memory search function
  */
-export function createMemoryTemplate(options: MemoryTemplateOptions = {}): DoScope {
-  const store = options.store ?? createMemoryStore()
+export function createMemorySearch(
+  options: MemoryTemplateOptions
+): (query: string) => Promise<SearchResult[]> {
+  const { storage = createInMemoryStore() } = options
 
-  const bindings: Record<string, unknown> = {
-    get: store.get,
-    has: store.has,
-    keys: store.keys,
+  return async (query: string): Promise<SearchResult[]> => {
+    const entities = await storage.searchEntities(query)
+
+    return entities.map(entity => ({
+      id: entity.id,
+      title: entity.name,
+      snippet: `${entity.type} - ${entity.observations.length} observations`,
+      metadata: {
+        type: entity.type,
+        observationCount: entity.observations.length
+      }
+    }))
   }
+}
 
-  if (options.allowWrites !== false) {
-    bindings.set = store.set
-    bindings.del = store.delete
-    bindings.clear = store.clear
+/**
+ * Create a memory fetch function
+ */
+export function createMemoryFetch(
+  options: MemoryTemplateOptions
+): (id: string) => Promise<FetchResult> {
+  const { storage = createInMemoryStore() } = options
+
+  return async (id: string): Promise<FetchResult> => {
+    const entity = await storage.getEntity(id)
+
+    if (!entity) {
+      return {
+        content: JSON.stringify({ error: 'Entity not found', id }),
+        contentType: 'application/json',
+        metadata: { found: false }
+      }
+    }
+
+    const relations = await storage.getRelationsForEntity(id)
+
+    const content = JSON.stringify({
+      ...entity,
+      relations
+    }, null, 2)
+
+    return {
+      content,
+      contentType: 'application/json',
+      metadata: {
+        found: true,
+        type: entity.type,
+        relationCount: relations.length
+      }
+    }
+  }
+}
+
+/**
+ * Create knowledge graph operations
+ */
+function createKnowledgeGraphOperations(storage: MemoryStore) {
+  return {
+    createEntity: async (name: string, type: string): Promise<Entity> => {
+      const entity: Entity = {
+        id: generateId(),
+        name,
+        type,
+        observations: []
+      }
+      await storage.setEntity(entity)
+      return entity
+    },
+
+    createRelation: async (
+      sourceId: string,
+      targetId: string,
+      type: string
+    ): Promise<Relation> => {
+      const relation: Relation = {
+        id: generateId(),
+        sourceId,
+        targetId,
+        type
+      }
+      await storage.setRelation(relation)
+      return relation
+    },
+
+    addObservation: async (
+      entityId: string,
+      content: string
+    ): Promise<Observation> => {
+      const entity = await storage.getEntity(entityId)
+      if (!entity) {
+        throw new Error(`Entity not found: ${entityId}`)
+      }
+
+      const observation: Observation = {
+        id: generateId(),
+        entityId,
+        content,
+        timestamp: new Date()
+      }
+
+      entity.observations.push(observation)
+      await storage.setEntity(entity)
+
+      return observation
+    },
+
+    searchNodes: async (query: string): Promise<Entity[]> => {
+      return storage.searchEntities(query)
+    },
+
+    openNodes: async (ids: string[]): Promise<Entity[]> => {
+      const entities: Entity[] = []
+      for (const id of ids) {
+        const entity = await storage.getEntity(id)
+        if (entity) {
+          entities.push(entity)
+        }
+      }
+      return entities
+    }
+  }
+}
+
+/**
+ * Create a memory template configuration
+ *
+ * @param options - Configuration options
+ * @returns MCPServerConfig for knowledge graph operations
+ *
+ * @example
+ * ```typescript
+ * const config = memory({
+ *   storage: createInMemoryStore()
+ * })
+ *
+ * // Or use default in-memory storage
+ * const config = memory({})
+ * ```
+ */
+export function memory(options: MemoryTemplateOptions = {}): MCPServerConfig {
+  const { storage = createInMemoryStore() } = options
+
+  const search = createMemorySearch({ storage })
+  const fetch = createMemoryFetch({ storage })
+  const graphOps = createKnowledgeGraphOperations(storage)
+
+  const doScope: DoScope = {
+    bindings: {
+      search,
+      fetch,
+      createEntity: graphOps.createEntity,
+      createRelation: graphOps.createRelation,
+      addObservation: graphOps.addObservation,
+      searchNodes: graphOps.searchNodes,
+      openNodes: graphOps.openNodes
+    },
+    types: MEMORY_TYPES
   }
 
   return {
-    bindings,
-    types: MEMORY_TYPES,
-    timeout: options.timeout ?? 5000,
-    permissions: {
-      allowNetwork: false,
-    },
+    search,
+    fetch,
+    do: doScope
   }
 }
+
+export default memory

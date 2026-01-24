@@ -1,110 +1,349 @@
 /**
  * Git Template
  *
- * Pre-built scope for git operations.
+ * Pre-built configuration for git agents.
+ * Provides commit log search, commit fetch, and git operations.
  */
 
+import type { MCPServerConfig, SearchResult, FetchResult } from '../core/types.js'
 import type { DoScope } from '../scope/types.js'
 
 /**
- * Git interface for sandbox operations
+ * Git commit information
  */
-export interface GitInterface {
-  /** Get git status */
-  status: () => Promise<{ modified: string[]; staged: string[]; untracked: string[] }>
-  /** Get git log */
-  log: (limit?: number) => Promise<Array<{ hash: string; message: string; author: string; date: string }>>
-  /** Get diff for a file or all files */
-  diff: (path?: string) => Promise<string>
-  /** Stage files */
-  add: (paths: string[]) => Promise<void>
+export interface GitCommit {
+  hash: string
+  author: string
+  date: Date
+  message: string
+  diff?: string
+}
+
+/**
+ * Git status information
+ */
+export interface GitStatus {
+  staged: string[]
+  modified: string[]
+  untracked: string[]
+}
+
+/**
+ * Git merge result
+ */
+export interface GitMergeResult {
+  success: boolean
+  conflicts?: string[]
+}
+
+/**
+ * Git client interface that templates expect
+ */
+export interface GitClient {
+  /** Search commit history */
+  log: (query: string) => Promise<GitCommit[]>
+  /** Get a specific commit */
+  show: (hash: string) => Promise<GitCommit>
+  /** Get repository status */
+  status: () => Promise<GitStatus>
+  /** Get diff */
+  diff: (target?: string) => Promise<string>
   /** Create a commit */
   commit: (message: string) => Promise<{ hash: string }>
-  /** Get current branch */
-  branch: () => Promise<string>
+  /** List branches */
+  branch: () => Promise<string[]>
+  /** Checkout a branch */
+  checkout: (target: string) => Promise<void>
+  /** Merge a branch */
+  merge: (branch: string) => Promise<GitMergeResult>
+  /** Stage files */
+  add: (paths: string[]) => Promise<void>
 }
 
 /**
- * Git template options
+ * Options for configuring the git template
  */
 export interface GitTemplateOptions {
-  /** Git interface implementation */
-  git: GitInterface
-  /** Whether to allow write operations (commit, add) */
-  allowWrites?: boolean
-  /** Timeout for git operations in ms */
-  timeout?: number
+  /** Path to the git repository */
+  repo: string
+  /** Optional git client (defaults to a mock implementation) */
+  client?: GitClient
+  /** If true, only allow read operations */
+  readonly?: boolean
 }
 
 /**
- * Type definitions for the git scope
+ * Type definitions for git template bindings
  */
-const GIT_TYPES = `
+export const GIT_TYPES = `
 /**
- * Get the current git status
- * @returns Object with modified, staged, and untracked file lists
+ * Search result from git log
  */
-declare function status(): Promise<{ modified: string[]; staged: string[]; untracked: string[] }>;
+interface SearchResult {
+  id: string;
+  title: string;
+  snippet?: string;
+  metadata?: Record<string, unknown>;
+}
 
 /**
- * Get commit history
- * @param limit - Maximum number of commits to return (default: 10)
- * @returns Array of commit objects with hash, message, author, and date
+ * Result from fetching a commit
  */
-declare function log(limit?: number): Promise<Array<{ hash: string; message: string; author: string; date: string }>>;
+interface FetchResult {
+  content: string;
+  contentType?: string;
+  metadata?: Record<string, unknown>;
+}
 
 /**
- * Get diff output
- * @param path - Optional path to get diff for specific file
- * @returns Diff output as a string
+ * Git commit information
  */
-declare function diff(path?: string): Promise<string>;
+interface GitCommit {
+  hash: string;
+  author: string;
+  date: Date;
+  message: string;
+  diff?: string;
+}
 
 /**
- * Stage files for commit
- * @param paths - Array of file paths to stage
+ * Git status information
  */
-declare function add(paths: string[]): Promise<void>;
+interface GitStatus {
+  staged: string[];
+  modified: string[];
+  untracked: string[];
+}
 
 /**
- * Create a commit with the staged changes
- * @param message - Commit message
- * @returns Object with the new commit hash
+ * Search git commit history
+ * @param query - Git log query (e.g., "--author=Name", "--since=2024-01-01")
+ * @returns Promise resolving to array of commit search results
  */
-declare function commit(message: string): Promise<{ hash: string }>;
+declare function search(query: string): Promise<SearchResult[]>;
 
 /**
- * Get the current branch name
- * @returns Current branch name
+ * Fetch a specific commit
+ * @param hash - Commit hash
+ * @returns Promise resolving to commit content
  */
-declare function branch(): Promise<string>;
+declare function fetch(hash: string): Promise<FetchResult>;
+
+/**
+ * Git operations
+ */
+declare const git: {
+  /**
+   * Search commit history
+   * @param query - Git log query
+   * @returns Promise resolving to array of commits
+   */
+  log(query: string): Promise<GitCommit[]>;
+
+  /**
+   * Get a specific commit
+   * @param hash - Commit hash
+   * @returns Promise resolving to commit details
+   */
+  show(hash: string): Promise<GitCommit>;
+
+  /**
+   * Get repository status
+   * @returns Promise resolving to status with staged, modified, and untracked files
+   */
+  status(): Promise<GitStatus>;
+
+  /**
+   * Get diff
+   * @param target - Optional target (file, commit, or branch)
+   * @returns Promise resolving to diff output
+   */
+  diff(target?: string): Promise<string>;
+
+  /**
+   * Create a commit
+   * @param message - Commit message
+   * @returns Promise resolving to new commit hash
+   */
+  commit(message: string): Promise<{ hash: string }>;
+
+  /**
+   * List branches
+   * @returns Promise resolving to array of branch names
+   */
+  branch(): Promise<string[]>;
+
+  /**
+   * Checkout a branch or commit
+   * @param target - Branch name or commit hash
+   */
+  checkout(target: string): Promise<void>;
+
+  /**
+   * Merge a branch
+   * @param branch - Branch name to merge
+   * @returns Promise resolving to merge result
+   */
+  merge(branch: string): Promise<{ success: boolean; conflicts?: string[] }>;
+
+  /**
+   * Stage files
+   * @param paths - Array of file paths to stage
+   */
+  add(paths: string[]): Promise<void>;
+};
 `
 
 /**
- * Create a git scope template
- *
- * @param options - Git template options
- * @returns DoScope configured for git operations
+ * Default mock git client for testing
  */
-export function createGitTemplate(options: GitTemplateOptions): DoScope {
-  const bindings: Record<string, unknown> = {
-    status: options.git.status,
-    log: options.git.log,
-    diff: options.git.diff,
-    branch: options.git.branch,
+function createMockGitClient(): GitClient {
+  return {
+    log: async () => [
+      { hash: 'mock123', author: 'Mock User', date: new Date(), message: 'Mock commit' }
+    ],
+    show: async (hash: string) => ({
+      hash,
+      author: 'Mock User',
+      date: new Date(),
+      message: 'Mock commit',
+      diff: 'Mock diff'
+    }),
+    status: async () => ({
+      staged: [],
+      modified: [],
+      untracked: []
+    }),
+    diff: async () => '',
+    commit: async () => ({ hash: 'newmock' }),
+    branch: async () => ['main'],
+    checkout: async () => {},
+    merge: async () => ({ success: true }),
+    add: async () => {}
+  }
+}
+
+/**
+ * Create a git search function
+ */
+export function createGitSearch(
+  options: GitTemplateOptions
+): (query: string) => Promise<SearchResult[]> {
+  const { client = createMockGitClient() } = options
+
+  return async (query: string): Promise<SearchResult[]> => {
+    const commits = await client.log(query)
+
+    return commits.map(commit => ({
+      id: commit.hash,
+      title: commit.message.split('\n')[0],
+      snippet: `${commit.author} - ${commit.date.toISOString()}`,
+      metadata: {
+        hash: commit.hash,
+        author: commit.author,
+        date: commit.date
+      }
+    }))
+  }
+}
+
+/**
+ * Create a git fetch function
+ */
+export function createGitFetch(
+  options: GitTemplateOptions
+): (hash: string) => Promise<FetchResult> {
+  const { client = createMockGitClient() } = options
+
+  return async (hash: string): Promise<FetchResult> => {
+    const commit = await client.show(hash)
+
+    const content = [
+      `Commit: ${commit.hash}`,
+      `Author: ${commit.author}`,
+      `Date: ${commit.date.toISOString()}`,
+      '',
+      commit.message,
+      '',
+      '---',
+      commit.diff || ''
+    ].join('\n')
+
+    return {
+      content,
+      contentType: 'text/plain',
+      metadata: {
+        hash: commit.hash,
+        author: commit.author,
+        date: commit.date
+      }
+    }
+  }
+}
+
+/**
+ * Create git operations object
+ */
+function createGitOperations(
+  client: GitClient,
+  readonly: boolean
+): Record<string, unknown> {
+  const readOps = {
+    log: client.log.bind(client),
+    show: client.show.bind(client),
+    status: client.status.bind(client),
+    diff: client.diff.bind(client),
+    branch: client.branch.bind(client)
   }
 
-  if (options.allowWrites !== false) {
-    bindings.add = options.git.add
-    bindings.commit = options.git.commit
+  if (readonly) {
+    return readOps
   }
 
   return {
-    bindings,
-    types: GIT_TYPES,
-    timeout: options.timeout ?? 30000,
-    permissions: {
-      allowNetwork: false,
-    },
+    ...readOps,
+    commit: client.commit.bind(client),
+    checkout: client.checkout.bind(client),
+    merge: client.merge.bind(client),
+    add: client.add.bind(client)
   }
 }
+
+/**
+ * Create a git template configuration
+ *
+ * @param options - Configuration options
+ * @returns MCPServerConfig for git operations
+ *
+ * @example
+ * ```typescript
+ * const config = git({
+ *   repo: '/path/to/repo',
+ *   readonly: false
+ * })
+ * ```
+ */
+export function git(options: GitTemplateOptions): MCPServerConfig {
+  const { client = createMockGitClient(), readonly = false } = options
+
+  const search = createGitSearch({ ...options, client })
+  const fetch = createGitFetch({ ...options, client })
+  const gitOps = createGitOperations(client, readonly)
+
+  const doScope: DoScope = {
+    bindings: {
+      search,
+      fetch,
+      git: gitOps
+    },
+    types: GIT_TYPES
+  }
+
+  return {
+    search,
+    fetch,
+    do: doScope
+  }
+}
+
+export default git
