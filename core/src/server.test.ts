@@ -248,4 +248,197 @@ describe('createMCPServer', () => {
       expect(server.server).toBeDefined()
     })
   })
+
+  describe('input validation with Zod', () => {
+    describe('search tool validation', () => {
+      it('should reject non-string query', async () => {
+        const { createMCPServer } = await import('./server.js')
+        const server = createMCPServer(testConfig)
+
+        // Passing a number instead of string for query
+        await expect(
+          server.callTool('search', { query: 123 })
+        ).rejects.toThrow()
+      })
+
+      it('should reject missing query', async () => {
+        const { createMCPServer } = await import('./server.js')
+        const server = createMCPServer(testConfig)
+
+        // Missing required query parameter
+        await expect(
+          server.callTool('search', {})
+        ).rejects.toThrow()
+      })
+
+      it('should reject non-number limit', async () => {
+        const { createMCPServer } = await import('./server.js')
+        const server = createMCPServer(testConfig)
+
+        // Passing a string instead of number for limit
+        await expect(
+          server.callTool('search', { query: 'test', limit: 'ten' })
+        ).rejects.toThrow()
+      })
+    })
+
+    describe('fetch tool validation', () => {
+      it('should reject non-string id', async () => {
+        const { createMCPServer } = await import('./server.js')
+        const server = createMCPServer(testConfig)
+
+        // Passing a number instead of string for id
+        await expect(
+          server.callTool('fetch', { id: 123 })
+        ).rejects.toThrow()
+      })
+
+      it('should reject missing id', async () => {
+        const { createMCPServer } = await import('./server.js')
+        const server = createMCPServer(testConfig)
+
+        // Missing required id parameter
+        await expect(
+          server.callTool('fetch', {})
+        ).rejects.toThrow()
+      })
+
+      it('should reject non-boolean includeMetadata', async () => {
+        const { createMCPServer } = await import('./server.js')
+        const server = createMCPServer(testConfig)
+
+        // Passing a string instead of boolean for includeMetadata
+        await expect(
+          server.callTool('fetch', { id: 'test', includeMetadata: 'yes' })
+        ).rejects.toThrow()
+      })
+    })
+
+    describe('do tool validation', () => {
+      it('should reject non-string code', async () => {
+        const { createMCPServer } = await import('./server.js')
+        const server = createMCPServer(testConfig)
+
+        // Passing a number instead of string for code
+        await expect(
+          server.callTool('do', { code: 123 })
+        ).rejects.toThrow()
+      })
+
+      it('should reject missing code', async () => {
+        const { createMCPServer } = await import('./server.js')
+        const server = createMCPServer(testConfig)
+
+        // Missing required code parameter
+        await expect(
+          server.callTool('do', {})
+        ).rejects.toThrow()
+      })
+    })
+  })
+
+  describe('auth configuration', () => {
+    it('should accept auth config', async () => {
+      const { createMCPServer } = await import('./server.js')
+      const configWithAuth: MCPServerConfig = {
+        ...testConfig,
+        auth: {
+          mode: 'anon',
+        },
+      }
+      const server = createMCPServer(configWithAuth)
+
+      expect(server).toBeDefined()
+      expect(server.getRegisteredTools()).toContain('search')
+    })
+
+    it('should make auth config available via getAuthConfig', async () => {
+      const { createMCPServer } = await import('./server.js')
+      const configWithAuth: MCPServerConfig = {
+        ...testConfig,
+        auth: {
+          mode: 'anon',
+        },
+      }
+      const server = createMCPServer(configWithAuth)
+
+      // Server should provide access to auth config
+      expect(server.getAuthConfig()).toEqual({ mode: 'anon' })
+    })
+
+    it('should return undefined for getAuthConfig when no auth configured', async () => {
+      const { createMCPServer } = await import('./server.js')
+      const server = createMCPServer(testConfig)
+
+      expect(server.getAuthConfig()).toBeUndefined()
+    })
+  })
+})
+
+describe('createToolRegistrar', () => {
+  it('should be exported from the module', async () => {
+    const { createToolRegistrar } = await import('./server.js')
+    expect(createToolRegistrar).toBeDefined()
+    expect(typeof createToolRegistrar).toBe('function')
+  })
+
+  it('should return a registrar object with registerTool method', async () => {
+    const { createToolRegistrar } = await import('./server.js')
+    const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js')
+
+    const mcpServer = new McpServer({ name: 'test', version: '0.1.0' })
+    const registrar = createToolRegistrar(mcpServer)
+
+    expect(registrar).toHaveProperty('registerTool')
+    expect(typeof registrar.registerTool).toBe('function')
+  })
+
+  it('should track registered tool names', async () => {
+    const { createToolRegistrar } = await import('./server.js')
+    const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js')
+    const { z } = await import('zod')
+
+    const mcpServer = new McpServer({ name: 'test', version: '0.1.0' })
+    const registrar = createToolRegistrar(mcpServer)
+
+    registrar.registerTool('test-tool', {
+      description: 'A test tool',
+      inputSchema: { query: z.string() },
+      mcpHandler: async () => ({ content: [{ type: 'text' as const, text: 'ok' }] }),
+      directHandler: async () => 'ok',
+    })
+
+    expect(registrar.getRegisteredTools()).toContain('test-tool')
+  })
+
+  it('should allow direct tool calls via callTool', async () => {
+    const { createToolRegistrar } = await import('./server.js')
+    const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js')
+    const { z } = await import('zod')
+
+    const mcpServer = new McpServer({ name: 'test', version: '0.1.0' })
+    const registrar = createToolRegistrar(mcpServer)
+
+    registrar.registerTool('echo', {
+      description: 'Echo tool',
+      inputSchema: { message: z.string() },
+      mcpHandler: async (args) => ({ content: [{ type: 'text' as const, text: args.message as string }] }),
+      directHandler: async (args) => args.message,
+    })
+
+    const result = await registrar.callTool('echo', { message: 'hello' })
+    expect(result).toBe('hello')
+  })
+
+  it('should throw for unknown tool in callTool', async () => {
+    const { createToolRegistrar } = await import('./server.js')
+    const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js')
+
+    const mcpServer = new McpServer({ name: 'test', version: '0.1.0' })
+    const registrar = createToolRegistrar(mcpServer)
+
+    await expect(
+      registrar.callTool('nonexistent', {})
+    ).rejects.toThrow('Unknown tool: nonexistent')
+  })
 })

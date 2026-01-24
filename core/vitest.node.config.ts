@@ -12,6 +12,7 @@ export default defineConfig({
       'src/server.test.ts',
       'src/index.test.ts',
       'src/types.test.ts',
+      'src/validation.test.ts',
       'src/auth/**/*.test.ts',
     ],
     globals: true,

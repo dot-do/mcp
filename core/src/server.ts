@@ -10,7 +10,13 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { z } from 'zod'
 import { evaluate } from 'ai-evaluate'
 import type { SandboxEnv } from 'ai-evaluate'
-import type { MCPServerConfig } from './types.js'
+import type { MCPServerConfig, AuthConfig } from './types.js'
+import {
+  SearchInputSchema,
+  FetchInputSchema,
+  DoInputSchema,
+  validateInput,
+} from './validation.js'
 
 /**
  * Options for creating an MCP server
@@ -22,6 +28,100 @@ export interface CreateMCPServerOptions {
   version?: string
   /** Worker environment with LOADER binding for sandboxed code execution */
   env?: SandboxEnv
+}
+
+/**
+ * MCP tool response content
+ */
+export interface MCPToolContent {
+  type: 'text'
+  text: string
+}
+
+/**
+ * MCP tool response
+ */
+export interface MCPToolResponse {
+  content: MCPToolContent[]
+  isError?: boolean
+}
+
+/**
+ * Tool registration configuration
+ */
+export interface ToolRegistrationConfig<TInput = Record<string, unknown>> {
+  /** Tool description */
+  description: string
+  /** Zod input schema */
+  inputSchema: Record<string, z.ZodTypeAny>
+  /** Handler for MCP protocol responses */
+  mcpHandler: (args: TInput) => Promise<MCPToolResponse>
+  /** Handler for direct tool calls (returns raw data) */
+  directHandler: (args: TInput) => Promise<unknown>
+}
+
+/**
+ * Tool registrar interface
+ */
+export interface ToolRegistrar {
+  /** Register a tool with both MCP and direct handlers */
+  registerTool<TInput = Record<string, unknown>>(
+    name: string,
+    config: ToolRegistrationConfig<TInput>
+  ): void
+  /** Get list of registered tool names */
+  getRegisteredTools(): string[]
+  /** Call a tool directly (for testing) */
+  callTool(name: string, args: Record<string, unknown>): Promise<unknown>
+}
+
+/**
+ * Creates a tool registrar that manages tool registration and handlers
+ *
+ * @param mcpServer - The MCP server instance to register tools with
+ * @returns A tool registrar object
+ */
+export function createToolRegistrar(mcpServer: McpServer): ToolRegistrar {
+  const registeredTools: string[] = []
+  const toolHandlers: Map<
+    string,
+    (args: Record<string, unknown>) => Promise<unknown>
+  > = new Map()
+
+  return {
+    registerTool<TInput = Record<string, unknown>>(
+      name: string,
+      config: ToolRegistrationConfig<TInput>
+    ): void {
+      // Register with MCP server
+      mcpServer.registerTool(
+        name,
+        {
+          description: config.description,
+          inputSchema: config.inputSchema,
+        },
+        async (args) => config.mcpHandler(args as TInput)
+      )
+
+      // Track registered tools
+      registeredTools.push(name)
+
+      // Store direct handler
+      toolHandlers.set(name, async (args) => config.directHandler(args as TInput))
+    },
+
+    getRegisteredTools(): string[] {
+      return [...registeredTools]
+    },
+
+    async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
+      const handler = toolHandlers.get(name)
+      if (!handler) {
+        throw new Error(`Unknown tool: ${name}`)
+      }
+      return handler(args)
+    },
+  }
 }
 
 /**
@@ -40,6 +140,8 @@ export interface MCPServerWrapper {
   getRegisteredTools(): string[]
   /** Call a tool directly (for testing) */
   callTool(name: string, args: Record<string, unknown>): Promise<unknown>
+  /** Get the authentication configuration */
+  getAuthConfig(): AuthConfig | undefined
 }
 
 /**
@@ -54,9 +156,7 @@ export function createMCPServer(
   options: CreateMCPServerOptions = {}
 ): MCPServerWrapper {
   const { name = 'mcp-server', version = '0.1.0', env: sandboxEnv } = options
-  const { search, fetch, do: doScope } = config
-  // auth will be used when implementing authentication middleware
-  // const { auth } = config
+  const { search, fetch, do: doScope, auth: authConfig } = config
 
   // Create the McpServer instance
   const mcpServer = new McpServer(
@@ -71,30 +171,22 @@ export function createMCPServer(
     }
   )
 
-  // Track registered tool names
-  const registeredTools: string[] = []
-
-  // Track tool handlers for direct calling
-  const toolHandlers: Map<
-    string,
-    (args: Record<string, unknown>) => Promise<unknown>
-  > = new Map()
+  // Create tool registrar for DRY tool registration
+  const registrar = createToolRegistrar(mcpServer)
 
   // Register the search tool
-  mcpServer.registerTool(
-    'search',
-    {
-      description: 'Search for information in the knowledge base',
-      inputSchema: {
-        query: z.string().describe('The search query'),
-        limit: z.number().optional().describe('Maximum number of results'),
-        offset: z.number().optional().describe('Number of results to skip'),
-      },
+  registrar.registerTool('search', {
+    description: 'Search for information in the knowledge base',
+    inputSchema: {
+      query: z.string().describe('The search query'),
+      limit: z.number().optional().describe('Maximum number of results'),
+      offset: z.number().optional().describe('Number of results to skip'),
     },
-    async (args) => {
-      const results = await search(args.query as string, {
-        limit: args.limit as number | undefined,
-        offset: args.offset as number | undefined,
+    mcpHandler: async (args) => {
+      const validatedArgs = validateInput(SearchInputSchema, args)
+      const results = await search(validatedArgs.query, {
+        limit: validatedArgs.limit,
+        offset: validatedArgs.offset,
       })
 
       return {
@@ -105,36 +197,32 @@ export function createMCPServer(
           },
         ],
       }
-    }
-  )
-  registeredTools.push('search')
-
-  // Handler for direct tool calls
-  toolHandlers.set('search', async (args) => {
-    return search(args.query as string, {
-      limit: args.limit as number | undefined,
-      offset: args.offset as number | undefined,
-    })
+    },
+    directHandler: async (args) => {
+      const validatedArgs = validateInput(SearchInputSchema, args)
+      return search(validatedArgs.query, {
+        limit: validatedArgs.limit,
+        offset: validatedArgs.offset,
+      })
+    },
   })
 
   // Register the fetch tool
-  mcpServer.registerTool(
-    'fetch',
-    {
-      description: 'Fetch a resource by its identifier',
-      inputSchema: {
-        id: z.string().describe('The resource identifier'),
-        includeMetadata: z
-          .boolean()
-          .optional()
-          .describe('Include metadata in response'),
-        format: z.string().optional().describe('Desired format of the content'),
-      },
+  registrar.registerTool('fetch', {
+    description: 'Fetch a resource by its identifier',
+    inputSchema: {
+      id: z.string().describe('The resource identifier'),
+      includeMetadata: z
+        .boolean()
+        .optional()
+        .describe('Include metadata in response'),
+      format: z.string().optional().describe('Desired format of the content'),
     },
-    async (args) => {
-      const result = await fetch(args.id as string, {
-        includeMetadata: args.includeMetadata as boolean | undefined,
-        format: args.format as string | undefined,
+    mcpHandler: async (args) => {
+      const validatedArgs = validateInput(FetchInputSchema, args)
+      const result = await fetch(validatedArgs.id, {
+        includeMetadata: validatedArgs.includeMetadata,
+        format: validatedArgs.format,
       })
 
       return {
@@ -145,37 +233,33 @@ export function createMCPServer(
           },
         ],
       }
-    }
-  )
-  registeredTools.push('fetch')
-
-  // Handler for direct tool calls
-  toolHandlers.set('fetch', async (args) => {
-    return fetch(args.id as string, {
-      includeMetadata: args.includeMetadata as boolean | undefined,
-      format: args.format as string | undefined,
-    })
+    },
+    directHandler: async (args) => {
+      const validatedArgs = validateInput(FetchInputSchema, args)
+      return fetch(validatedArgs.id, {
+        includeMetadata: validatedArgs.includeMetadata,
+        format: validatedArgs.format,
+      })
+    },
   })
 
   // Register the do tool
-  mcpServer.registerTool(
-    'do',
-    {
-      description: `Execute TypeScript code in a sandboxed environment.
+  registrar.registerTool('do', {
+    description: `Execute TypeScript code in a sandboxed environment.
 
 Available bindings:
 ${doScope.types}`,
-      inputSchema: {
-        code: z.string().describe('TypeScript code to execute'),
-      },
+    inputSchema: {
+      code: z.string().describe('TypeScript code to execute'),
     },
-    async (args) => {
+    mcpHandler: async (args) => {
+      const validatedArgs = validateInput(DoInputSchema, args)
       const startTime = Date.now()
 
       try {
         // ai-evaluate uses LOADER if available, falls back to Miniflare in Node.js
         const result = await evaluate({
-          script: args.code as string,
+          script: validatedArgs.code,
           timeout: doScope.timeout,
           fetch: doScope.permissions?.allowNetwork ? undefined : null,
           rpc: doScope.bindings, // Pass domain bindings via RPC
@@ -212,29 +296,27 @@ ${doScope.types}`,
           isError: true,
         }
       }
-    }
-  )
-  registeredTools.push('do')
+    },
+    directHandler: async (args) => {
+      const validatedArgs = validateInput(DoInputSchema, args)
+      const startTime = Date.now()
 
-  // Handler for direct tool calls
-  toolHandlers.set('do', async (args) => {
-    const startTime = Date.now()
+      // ai-evaluate uses LOADER if available, falls back to Miniflare in Node.js
+      const result = await evaluate({
+        script: validatedArgs.code,
+        timeout: doScope.timeout,
+        fetch: doScope.permissions?.allowNetwork ? undefined : null,
+        rpc: doScope.bindings,
+      }, sandboxEnv)
 
-    // ai-evaluate uses LOADER if available, falls back to Miniflare in Node.js
-    const result = await evaluate({
-      script: args.code as string,
-      timeout: doScope.timeout,
-      fetch: doScope.permissions?.allowNetwork ? undefined : null,
-      rpc: doScope.bindings,
-    }, sandboxEnv)
-
-    const duration = Date.now() - startTime
-    return {
-      success: result.success,
-      value: result.value,
-      logs: result.logs,
-      duration,
-    }
+      const duration = Date.now() - startTime
+      return {
+        success: result.success,
+        value: result.value,
+        logs: result.logs,
+        duration,
+      }
+    },
   })
 
   return {
@@ -253,15 +335,15 @@ ${doScope.types}`,
     },
 
     getRegisteredTools(): string[] {
-      return [...registeredTools]
+      return registrar.getRegisteredTools()
     },
 
     async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-      const handler = toolHandlers.get(name)
-      if (!handler) {
-        throw new Error(`Unknown tool: ${name}`)
-      }
-      return handler(args)
+      return registrar.callTool(name, args)
+    },
+
+    getAuthConfig(): AuthConfig | undefined {
+      return authConfig
     },
   }
 }
