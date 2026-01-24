@@ -5,7 +5,7 @@
  * and handlers.
  */
 
-import type { SearchFunction, FetchFunction } from '../core/types.js'
+import type { SearchFunction, FetchFunction } from '../types.js'
 import type { DoScope } from '../scope/types.js'
 import { searchTool, createSearchHandler } from './search.js'
 import { fetchTool, createFetchHandler } from './fetch.js'
@@ -20,7 +20,7 @@ export interface Tool {
   inputSchema: {
     type: string
     properties: Record<string, unknown>
-    required: string[]
+    required: readonly string[] | string[]
   }
 }
 

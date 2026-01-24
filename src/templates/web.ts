@@ -5,8 +5,7 @@
  * Provides search (via Brave or custom provider) and HTTP fetch capabilities.
  */
 
-import type { MCPServerConfig, SearchResult, FetchResult } from '../core/types.js'
-import type { DoScope } from '../scope/types.js'
+import type { MCPServerConfig, SearchResult, FetchResult, DoScope } from '@dotdo/mcp'
 
 /**
  * Options for configuring the web template
@@ -129,7 +128,7 @@ export function createWebSearch(options: WebTemplateOptions): (query: string) =>
         return (data.web?.results || []).map((result, index) => ({
           id: `brave-${index}`,
           title: result.title,
-          snippet: result.description,
+          description: result.description || '',
           url: result.url
         }))
       } catch (error) {
@@ -143,7 +142,7 @@ export function createWebSearch(options: WebTemplateOptions): (query: string) =>
       {
         id: 'mock-1',
         title: `Result for: ${query}`,
-        snippet: `This is a mock search result for "${query}"`,
+        description: `This is a mock search result for "${query}"`,
         url: `https://example.com/search?q=${encodeURIComponent(query)}`
       }
     ]
@@ -153,10 +152,10 @@ export function createWebSearch(options: WebTemplateOptions): (query: string) =>
 /**
  * Create an HTTP fetch function with domain restrictions
  */
-export function createHttpFetch(options: WebTemplateOptions): (url: string) => Promise<FetchResult> {
+export function createHttpFetch(options: WebTemplateOptions): (url: string) => Promise<FetchResult | null> {
   const { allowedDomains } = options
 
-  return async (url: string): Promise<FetchResult> => {
+  return async (url: string): Promise<FetchResult | null> => {
     // Check domain restrictions
     if (!isAllowedUrl(url, allowedDomains)) {
       throw new Error(`Domain not allowed: ${url}`)
@@ -177,8 +176,9 @@ export function createHttpFetch(options: WebTemplateOptions): (url: string) => P
       const content = await response.text()
 
       return {
+        id: url,
         content,
-        contentType,
+        mimeType: contentType,
         metadata: {
           status: response.status,
           url: response.url
@@ -193,8 +193,9 @@ export function createHttpFetch(options: WebTemplateOptions): (url: string) => P
 
       // Return mock content for testing
       return {
+        id: url,
         content: `Mock content for ${url}`,
-        contentType: 'text/html',
+        mimeType: 'text/html',
         metadata: {
           mock: true,
           url

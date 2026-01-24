@@ -4,9 +4,17 @@
  * Handles JSON-RPC requests over HTTP with optional SSE streaming.
  */
 
-import type { MCPServerWrapper } from '../server.js'
-import type { MCPServer } from '../core/types.js'
-import type { AuthContext } from '../auth/types.js'
+import type { MCPServerWrapper } from '@dotdo/mcp'
+import type { AuthContext } from '@dotdo/mcp'
+
+/**
+ * Legacy MCPServer interface for backwards compatibility
+ */
+interface MCPServer {
+  listen(): Promise<void>
+  close(): Promise<void>
+  handleRequest(request: unknown): Promise<unknown>
+}
 
 /**
  * JSON-RPC request structure

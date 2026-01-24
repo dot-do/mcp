@@ -15,6 +15,8 @@ export interface AuthContext {
   readonly: boolean
   /** Whether the user has admin privileges */
   isAdmin?: boolean
+  /** The raw access token (for OAuth/API key contexts) */
+  token?: string
   /** Additional metadata from the authentication provider */
   metadata?: Record<string, unknown>
 }

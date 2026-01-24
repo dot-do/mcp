@@ -170,9 +170,12 @@ ${doScope.types}`,
       const startTime = Date.now()
 
       try {
-        const result = await evaluate(args.code as string, {
-          bindings: doScope.bindings,
+        const result = await evaluate({
+          script: args.code as string,
           timeout: doScope.timeout,
+          // Note: bindings need to be injected via a different mechanism
+          // For now, bindings are available through sdk config
+          sdk: typeof doScope.bindings === 'object' ? { ...doScope.bindings as Record<string, unknown> } : undefined,
         })
 
         const duration = Date.now() - startTime
@@ -208,9 +211,10 @@ ${doScope.types}`,
   toolHandlers.set('do', async (args) => {
     const startTime = Date.now()
 
-    const result = await evaluate(args.code as string, {
-      bindings: doScope.bindings,
+    const result = await evaluate({
+      script: args.code as string,
       timeout: doScope.timeout,
+      sdk: typeof doScope.bindings === 'object' ? { ...doScope.bindings as Record<string, unknown> } : undefined,
     })
 
     const duration = Date.now() - startTime

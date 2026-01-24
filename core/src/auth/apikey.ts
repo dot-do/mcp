@@ -4,7 +4,7 @@
  * Handles API key verification via RPC endpoint.
  */
 
-import type { AuthContext, AuthResult, ApiKeyConfig, AuthError } from './types'
+import type { AuthContext, AuthResult, ApiKeyConfig, AuthError } from './types.js'
 
 /**
  * API key verification response from RPC endpoint

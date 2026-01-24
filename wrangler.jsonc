@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler.json",
+  "name": "mcp",
+  "account_id": "b6641681fe423910342b9ffa1364c76d",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Default environment variables
+  "vars": {
+    "MODE": "test",
+    "ISSUER": "https://test.mcp.do",
+    "DEBUG": "true"
+  },
+
+  // Local development
+  "dev": {
+    "port": 8787,
+    "local_protocol": "http",
+    "ip": "0.0.0.0"
+  },
+
+  // Observability
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+
+  // --- Test Environment - test.mcp.do ---
+  // No upstream OAuth, any credentials work
+  "env": {
+    "test": {
+      "name": "mcp-test",
+      "vars": {
+        "MODE": "test",
+        "ISSUER": "https://test.mcp.do",
+        "DEBUG": "true"
+      },
+      "routes": [
+        {
+          "pattern": "test.mcp.do",
+          "custom_domain": true
+        }
+      ]
+    },
+
+    // --- Dev Environment - dev.mcp.do ---
+    // WorkOS sandbox for real auth testing
+    "dev": {
+      "name": "mcp-dev",
+      "vars": {
+        "MODE": "dev",
+        "ISSUER": "https://dev.mcp.do",
+        "DEBUG": "true"
+      },
+      "routes": [
+        {
+          "pattern": "dev.mcp.do",
+          "custom_domain": true
+        }
+      ]
+      // WORKOS_API_KEY and WORKOS_CLIENT_ID should be set via wrangler secret
+    },
+
+    // --- Production Environment - mcp.do ---
+    // WorkOS production for live traffic
+    "production": {
+      "name": "mcp-production",
+      "vars": {
+        "MODE": "production",
+        "ISSUER": "https://mcp.do",
+        "DEBUG": "false"
+      },
+      "routes": [
+        {
+          "pattern": "mcp.do",
+          "custom_domain": true
+        }
+      ]
+      // WORKOS_API_KEY and WORKOS_CLIENT_ID should be set via wrangler secret
+    }
+  }
+}

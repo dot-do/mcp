@@ -1,0 +1,79 @@
+{
+  "name": "@dotdo/mcp",
+  "version": "0.1.0",
+  "description": "MCP Server library with search, fetch, and do primitives - the core package for building MCP servers",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./tools": {
+      "types": "./dist/tools/index.d.ts",
+      "import": "./dist/tools/index.js"
+    },
+    "./scope": {
+      "types": "./dist/scope/index.d.ts",
+      "import": "./dist/scope/index.js"
+    },
+    "./auth": {
+      "types": "./dist/auth/index.d.ts",
+      "import": "./dist/auth/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build && npm test",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "agents",
+    "search",
+    "fetch",
+    "sandbox",
+    "cloudflare-workers",
+    "hono"
+  ],
+  "author": "Nathan Clevenger",
+  "license": "MIT",
+  "homepage": "https://mcp.do",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/drivly/mcp.git",
+    "directory": "core"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.3",
+    "ai-evaluate": "^2.1.5",
+    "hono": "^4.11.5",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260124.0",
+    "typescript": "^5.9.3",
+    "vitest": "^2.0.0"
+  },
+  "peerDependencies": {
+    "hono": ">=4.0.0"
+  }
+}

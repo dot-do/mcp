@@ -4,11 +4,11 @@
  * Supports anonymous, OAuth, and API key authentication modes.
  */
 
-import type { AuthConfig, AuthResult, AuthError } from './types'
-import { detectTokenType } from './types'
-import { createAnonymousContext } from './anonymous'
-import { introspectToken, createOAuthContext } from './oauth'
-import { verifyApiKey, createApiKeyContext } from './apikey'
+import type { AuthConfig, AuthResult, AuthError } from './types.js'
+import { detectTokenType } from './types.js'
+import { createAnonymousContext } from './anonymous.js'
+import { introspectToken, createOAuthContext } from './oauth.js'
+import { verifyApiKey, createApiKeyContext } from './apikey.js'
 
 /**
  * Parse result for Authorization header

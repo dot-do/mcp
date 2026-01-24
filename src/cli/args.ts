@@ -22,6 +22,12 @@ export interface CLIArgs {
   http: boolean
   /** Path to config file */
   config?: string
+  /** Enable OAuth authentication for stdio */
+  auth: boolean
+  /** Skip browser auto-open during auth */
+  noBrowser: boolean
+  /** Force new login even if token exists */
+  forceLogin: boolean
 }
 
 /**
@@ -47,6 +53,9 @@ export function parseArgs(args: string[]): CLIArgs {
     port: 8787,
     stdio: true,
     http: false,
+    auth: false,
+    noBrowser: false,
+    forceLogin: false,
   }
 
   for (let i = 0; i < args.length; i++) {
@@ -87,6 +96,19 @@ export function parseArgs(args: string[]): CLIArgs {
       case '-c':
         result.config = args[++i]
         break
+
+      case '--auth':
+      case '-a':
+        result.auth = true
+        break
+
+      case '--no-browser':
+        result.noBrowser = true
+        break
+
+      case '--force-login':
+        result.forceLogin = true
+        break
     }
   }
 
@@ -114,6 +136,11 @@ Options:
   --http                  Use HTTP transport
   -c, --config <path>     Path to config file
 
+Authentication (stdio only):
+  -a, --auth              Enable OAuth authentication via oauth.do
+  --no-browser            Skip automatic browser open during login
+  --force-login           Force new login even if token exists
+
 Templates:
   web          Web research (Brave search, HTTP fetch)
   database     SQL database operations
@@ -133,6 +160,9 @@ Examples:
 
   # Start with stdio (for Claude Desktop)
   mcp --stdio --template filesystem
+
+  # Start with authentication
+  mcp --auth --template web
 `.trim()
 }
 

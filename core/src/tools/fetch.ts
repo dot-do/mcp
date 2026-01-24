@@ -4,7 +4,7 @@
  * MCP tool for retrieving resources using a configured fetch function.
  */
 
-import type { FetchFunction, FetchResult } from '../core/types.js'
+import type { FetchFunction, FetchResult } from '../types.js'
 
 /**
  * Tool definition for the fetch tool
@@ -67,12 +67,24 @@ export function createFetchHandler(
 ): (input: FetchInput) => Promise<ToolResponse> {
   return async (input: FetchInput): Promise<ToolResponse> => {
     try {
-      const result: FetchResult = await fetchFn(input.resource)
+      const result: FetchResult | null = await fetchFn(input.resource)
+
+      if (!result) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ error: 'Resource not found' })
+            }
+          ],
+          isError: true
+        }
+      }
 
       const content: Array<{ type: string; text: string }> = []
 
       // Format content based on content type
-      const textContent = isJsonContentType(result.contentType)
+      const textContent = isJsonContentType(result.mimeType)
         ? formatJsonContent(result.content)
         : result.content
 

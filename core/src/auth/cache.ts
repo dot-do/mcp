@@ -5,7 +5,7 @@
  * external verification calls.
  */
 
-import type { AuthResult } from './types'
+import type { AuthResult } from './types.js'
 
 /**
  * Cache entry with value and expiration timestamp

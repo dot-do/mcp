@@ -5,8 +5,7 @@
  * Provides entity, relation, and observation management with search capabilities.
  */
 
-import type { MCPServerConfig, SearchResult, FetchResult } from '../core/types.js'
-import type { DoScope } from '../scope/types.js'
+import type { MCPServerConfig, SearchResult, FetchResult, DoScope } from '@dotdo/mcp'
 
 /**
  * Entity in the knowledge graph

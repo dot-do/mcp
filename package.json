@@ -1,7 +1,7 @@
 {
-  "name": "mcp",
+  "name": "mcp.do",
   "version": "0.1.0",
-  "description": "Three primitives. Infinite capabilities. Build AI agents that can search, fetch, and do.",
+  "description": "MCP managed service - deploy MCP servers with search, fetch, and do primitives",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -25,12 +25,17 @@
   ],
   "scripts": {
     "build": "tsc",
+    "build:all": "npm run build -w core && npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:all": "npm run test -w core && npm run test",
     "lint": "eslint src",
     "dev": "wrangler dev",
     "typecheck": "tsc --noEmit"
   },
+  "workspaces": [
+    "core"
+  ],
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260124.0",
     "@eslint/js": "^9.39.2",
@@ -42,10 +47,12 @@
     "wrangler": "^4.60.0"
   },
   "dependencies": {
+    "@dotdo/mcp": "workspace:*",
+    "@dotdo/oauth": "^0.1.3",
     "@modelcontextprotocol/sdk": "^1.25.3",
-    "ai-evaluate": "^2.1.5",
     "hono": "^4.11.5",
     "jose": "^6.1.3",
+    "oauth.do": "^0.2.2",
     "zod": "^4.3.6"
   }
 }

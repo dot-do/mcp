@@ -3,7 +3,7 @@
  * Provides readonly access for unauthenticated users
  */
 
-import type { AuthContext } from './types'
+import type { AuthContext } from './types.js'
 
 /**
  * Options for creating an anonymous context

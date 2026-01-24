@@ -65,6 +65,37 @@ async function main() {
     // Stdio transport for Claude Desktop integration
     console.error('Starting MCP server with stdio transport...')
 
+    // Get auth mode from config (default to anon+auth for best UX)
+    const authMode = config.authMode || 'anon+auth'
+
+    // Handle authentication
+    const { getAuthForMode, authenticateStdio } = await import('../dist/transports/stdio.js')
+
+    let authContext
+    if (args.auth) {
+      // Explicit --auth flag: always authenticate
+      console.error('Authenticating via oauth.do...')
+      authContext = await authenticateStdio({
+        noBrowser: args.noBrowser,
+        forceLogin: args.forceLogin,
+        print: (msg) => console.error(msg),
+      })
+    } else {
+      // Automatic auth based on server mode
+      authContext = await getAuthForMode(authMode, {
+        noBrowser: args.noBrowser,
+        forceLogin: args.forceLogin,
+        print: (msg) => console.error(msg),
+      })
+    }
+
+    if (authContext.type !== 'anon') {
+      console.error(`Authenticated (${authContext.type})`)
+    }
+
+    // Store authContext for use by server
+    config.authContext = authContext
+
     // Import and start stdio transport
     const { connectStdio } = await import('../dist/transports/stdio.js')
     await connectStdio(server)

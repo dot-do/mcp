@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { connectStdio } from '../../src/transports/stdio.js'
+import { connectStdio, tryGetAuth, getAuthForMode } from '../../src/transports/stdio.js'
 import type { MCPServerWrapper } from '../../src/server.js'
 
 // Mock the StdioServerTransport
@@ -122,6 +122,31 @@ describe('stdio transport', () => {
         await sigtermHandler()
         expect(server.close).toHaveBeenCalled()
       }
+    })
+  })
+
+  describe('auth functions', () => {
+    it('tryGetAuth should return null when oauth.do is not available', async () => {
+      // Mock oauth.do/node to throw
+      vi.mock('oauth.do/node', () => {
+        throw new Error('Module not found')
+      })
+
+      const result = await tryGetAuth()
+      expect(result).toBeNull()
+    })
+
+    it('getAuthForMode should return anonymous for anon mode', async () => {
+      const result = await getAuthForMode('anon')
+      expect(result.type).toBe('anon')
+      expect(result.id).toBe('anonymous')
+      expect(result.readonly).toBe(true)
+    })
+
+    it('getAuthForMode should return anonymous for anon+auth when not logged in', async () => {
+      // tryGetAuth returns null when not logged in
+      const result = await getAuthForMode('anon+auth')
+      expect(result.type).toBe('anon')
     })
   })
 })

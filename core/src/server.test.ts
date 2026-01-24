@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import type { MCPServerConfig, DoScope, SearchResult, FetchResult } from './types'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { MCPServerConfig, DoScope, SearchResult, FetchResult } from './types.js'
 
 describe('createMCPServer', () => {
   // Mock search function
@@ -31,13 +31,13 @@ describe('createMCPServer', () => {
 
   describe('factory function', () => {
     it('should be exported from the module', async () => {
-      const { createMCPServer } = await import('./server')
+      const { createMCPServer } = await import('./server.js')
       expect(createMCPServer).toBeDefined()
       expect(typeof createMCPServer).toBe('function')
     })
 
     it('should accept MCPServerConfig and return a server instance', async () => {
-      const { createMCPServer } = await import('./server')
+      const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
       expect(server).toBeDefined()
@@ -45,7 +45,7 @@ describe('createMCPServer', () => {
     })
 
     it('should return server with connect method', async () => {
-      const { createMCPServer } = await import('./server')
+      const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
       expect(server.connect).toBeDefined()
@@ -53,7 +53,7 @@ describe('createMCPServer', () => {
     })
 
     it('should return server with close method', async () => {
-      const { createMCPServer } = await import('./server')
+      const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
       expect(server.close).toBeDefined()
@@ -63,7 +63,7 @@ describe('createMCPServer', () => {
 
   describe('tool registration', () => {
     it('should register search tool', async () => {
-      const { createMCPServer } = await import('./server')
+      const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
       // The server should have the search tool registered
@@ -72,7 +72,7 @@ describe('createMCPServer', () => {
     })
 
     it('should register fetch tool', async () => {
-      const { createMCPServer } = await import('./server')
+      const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
       const tools = server.getRegisteredTools()
@@ -80,7 +80,7 @@ describe('createMCPServer', () => {
     })
 
     it('should register do tool', async () => {
-      const { createMCPServer } = await import('./server')
+      const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
       const tools = server.getRegisteredTools()
@@ -90,7 +90,7 @@ describe('createMCPServer', () => {
 
   describe('search tool execution', () => {
     it('should call search function with query', async () => {
-      const { createMCPServer } = await import('./server')
+      const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
       mockSearch.mockResolvedValueOnce([
@@ -106,7 +106,7 @@ describe('createMCPServer', () => {
     })
 
     it('should return search results', async () => {
-      const { createMCPServer } = await import('./server')
+      const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
       const expectedResults: SearchResult[] = [
@@ -121,7 +121,7 @@ describe('createMCPServer', () => {
     })
 
     it('should handle empty search results', async () => {
-      const { createMCPServer } = await import('./server')
+      const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
       mockSearch.mockResolvedValueOnce([])
@@ -134,7 +134,7 @@ describe('createMCPServer', () => {
 
   describe('fetch tool execution', () => {
     it('should call fetch function with id', async () => {
-      const { createMCPServer } = await import('./server')
+      const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
       const expectedResult: FetchResult = {
@@ -151,7 +151,7 @@ describe('createMCPServer', () => {
     })
 
     it('should return null for not found', async () => {
-      const { createMCPServer } = await import('./server')
+      const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
       mockFetch.mockResolvedValueOnce(null)
@@ -164,7 +164,7 @@ describe('createMCPServer', () => {
 
   describe('do tool execution', () => {
     it('should execute code with bindings', async () => {
-      const { createMCPServer } = await import('./server')
+      const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
       const result = await server.callTool('do', { code: 'return testFn()' })
@@ -173,7 +173,7 @@ describe('createMCPServer', () => {
     })
 
     it('should pass timeout to evaluate', async () => {
-      const { createMCPServer } = await import('./server')
+      const { createMCPServer } = await import('./server.js')
       const configWithTimeout: MCPServerConfig = {
         ...testConfig,
         do: {
@@ -192,7 +192,7 @@ describe('createMCPServer', () => {
 
   describe('connect and close lifecycle', () => {
     it('should connect to a transport', async () => {
-      const { createMCPServer } = await import('./server')
+      const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
       // Create a mock transport
@@ -212,7 +212,7 @@ describe('createMCPServer', () => {
     })
 
     it('should close connection properly', async () => {
-      const { createMCPServer } = await import('./server')
+      const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
       const mockTransport = {
@@ -234,7 +234,7 @@ describe('createMCPServer', () => {
 
   describe('MCPServer interface', () => {
     it('should expose underlying McpServer instance', async () => {
-      const { createMCPServer } = await import('./server')
+      const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
       // Should have access to the underlying MCP SDK server

@@ -1,4 +1,4 @@
-import type { DoScope } from './types'
+import type { DoScope } from './types.js'
 
 /**
  * Result of scope validation

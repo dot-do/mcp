@@ -1,6 +1,6 @@
-import type { DoScope } from './types'
-import { generateTypes } from './generate-types'
-import { validateScope } from './validate'
+import type { DoScope } from './types.js'
+import { generateTypes } from './generate-types.js'
+import { validateScope } from './validate.js'
 
 /**
  * Error thrown when scope validation fails

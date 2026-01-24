@@ -3,7 +3,7 @@
  * Implements RFC 7662 - OAuth 2.0 Token Introspection
  */
 
-import type { AuthContext, AuthResult, OAuthConfig, AuthError } from './types'
+import type { AuthContext, AuthResult, OAuthConfig, AuthError } from './types.js'
 
 /**
  * OAuth 2.0 Token Introspection Response

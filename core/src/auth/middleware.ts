@@ -3,8 +3,8 @@
  */
 
 import type { MiddlewareHandler, Context, Next } from 'hono'
-import type { AuthConfig, AuthContext } from './types'
-import { authenticateRequest } from './authenticate'
+import type { AuthConfig, AuthContext } from './types.js'
+import { authenticateRequest } from './authenticate.js'
 
 /**
  * Extend Hono's ContextVariableMap with authContext

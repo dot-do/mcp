@@ -4,7 +4,7 @@
  * MCP tool for searching information using a configured search function.
  */
 
-import type { SearchFunction, SearchResult } from '../core/types.js'
+import type { SearchFunction, SearchResult } from '../types.js'
 
 /**
  * Tool definition for the search tool

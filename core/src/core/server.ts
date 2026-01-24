@@ -51,9 +51,10 @@ export function createMCPServer(config: MCPServerConfig): MCPServer {
     // Import ai-evaluate dynamically for sandbox execution
     const { evaluate } = await import('ai-evaluate')
 
-    const result = await evaluate(code, {
-      bindings: doScope.bindings,
+    const result = await evaluate({
+      script: code,
       timeout: doScope.timeout,
+      sdk: typeof doScope.bindings === 'object' ? { ...doScope.bindings as Record<string, unknown> } : undefined,
     })
 
     return result

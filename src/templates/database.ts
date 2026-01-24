@@ -5,8 +5,7 @@
  * Provides SQL query search, record fetch, and CRUD operations.
  */
 
-import type { MCPServerConfig, SearchResult, FetchResult } from '../core/types.js'
-import type { DoScope } from '../scope/types.js'
+import type { MCPServerConfig, SearchResult, FetchResult, DoScope } from '@dotdo/mcp'
 
 /**
  * Database client interface that templates expect

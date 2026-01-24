@@ -5,8 +5,7 @@
  * Provides commit log search, commit fetch, and git operations.
  */
 
-import type { MCPServerConfig, SearchResult, FetchResult } from '../core/types.js'
-import type { DoScope } from '../scope/types.js'
+import type { MCPServerConfig, SearchResult, FetchResult, DoScope } from '@dotdo/mcp'
 
 /**
  * Git commit information

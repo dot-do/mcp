@@ -72,7 +72,7 @@ import { memory } from './memory.js'
  *
  * @example
  * ```typescript
- * import { templates } from 'mcp'
+ * import { templates } from 'mcp.do'
  *
  * const server = createMCPServer(templates.web({
  *   searchProvider: 'brave',

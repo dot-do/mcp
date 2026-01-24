@@ -2,13 +2,127 @@
  * Stdio Transport for MCP Server
  *
  * Handles JSON-RPC communication over stdin/stdout.
+ * Supports authentication via oauth.do/node for CLI usage.
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import type { MCPServerWrapper } from '../server.js'
-import type { MCPServer } from '../core/types.js'
-import type { AuthContext } from '../auth/types.js'
+import type { MCPServerWrapper, AuthContext } from '@dotdo/mcp'
 import type { JsonRpcRequest, JsonRpcResponse } from './http.js'
+
+/**
+ * Legacy MCPServer interface for backwards compatibility
+ */
+interface MCPServer {
+  listen(): Promise<void>
+  close(): Promise<void>
+  handleRequest(request: unknown): Promise<unknown>
+}
+
+/**
+ * Authenticate via oauth.do device flow
+ * Uses ensureLoggedIn from oauth.do/node to get a valid token
+ *
+ * @param options - Authentication options
+ * @returns AuthContext with OAuth token
+ */
+export async function authenticateStdio(options: {
+  /** Skip browser auto-open */
+  noBrowser?: boolean
+  /** Force new login even if token exists */
+  forceLogin?: boolean
+  /** Print function for output (default: console.error to avoid stdout) */
+  print?: (message: string) => void
+} = {}): Promise<AuthContext> {
+  // Dynamic import to avoid bundling oauth.do in non-Node environments
+  const { ensureLoggedIn, forceLogin } = await import('oauth.do/node')
+
+  const print = options.print ?? ((msg: string) => console.error(msg))
+
+  const loginFn = options.forceLogin ? forceLogin : ensureLoggedIn
+  const result = await loginFn({
+    openBrowser: !options.noBrowser,
+    print,
+  })
+
+  return {
+    type: 'oauth',
+    id: 'oauth-user', // Will be populated by token introspection if needed
+    token: result.token,
+    readonly: false,
+  }
+}
+
+/**
+ * Try to get existing auth without prompting for login
+ * Returns null if no valid token exists
+ *
+ * @returns AuthContext if logged in, null otherwise
+ */
+export async function tryGetAuth(): Promise<AuthContext | null> {
+  try {
+    const { getToken, isAuthenticated } = await import('oauth.do/node')
+
+    // Check if we have a valid token without prompting
+    if (await isAuthenticated()) {
+      const token = await getToken()
+      if (token) {
+        return {
+          type: 'oauth',
+          id: 'oauth-user',
+          token,
+          readonly: false,
+        }
+      }
+    }
+    return null
+  } catch {
+    // oauth.do not available or no token
+    return null
+  }
+}
+
+/**
+ * Get auth context based on server auth mode
+ *
+ * - 'auth-required': Force login, throw if can't authenticate
+ * - 'anon+auth': Use token if available, otherwise anonymous
+ * - 'anon': Always anonymous
+ *
+ * @param authMode - Server's authentication mode
+ * @param options - Authentication options
+ * @returns AuthContext appropriate for the mode
+ */
+export async function getAuthForMode(
+  authMode: 'anon' | 'anon+auth' | 'auth-required',
+  options: {
+    noBrowser?: boolean
+    forceLogin?: boolean
+    print?: (message: string) => void
+  } = {}
+): Promise<AuthContext> {
+  const print = options.print ?? ((msg: string) => console.error(msg))
+
+  if (authMode === 'anon') {
+    // Always anonymous
+    return { type: 'anon', id: 'anonymous', readonly: true }
+  }
+
+  if (authMode === 'auth-required') {
+    // Must authenticate
+    print('Authentication required...')
+    return authenticateStdio(options)
+  }
+
+  // anon+auth: Try to use existing token, fall back to anonymous
+  const existingAuth = await tryGetAuth()
+  if (existingAuth) {
+    print('Using existing authentication')
+    return existingAuth
+  }
+
+  // No existing auth, use anonymous
+  return { type: 'anon', id: 'anonymous', readonly: true }
+}
 
 /**
  * Connect an MCP server to stdio transport using the MCP SDK
@@ -45,6 +159,14 @@ export interface StdioTransportOptions {
   input?: NodeJS.ReadableStream
   /** Custom output stream (default: process.stdout) */
   output?: NodeJS.WritableStream
+  /** Server auth mode - determines automatic auth behavior */
+  authMode?: 'anon' | 'anon+auth' | 'auth-required'
+  /** Explicitly force OAuth authentication (overrides authMode) */
+  auth?: boolean
+  /** Skip browser auto-open during auth */
+  noBrowser?: boolean
+  /** Force new login even if token exists */
+  forceLogin?: boolean
 }
 
 /**
@@ -68,10 +190,36 @@ export function createStdioTransport(
   server: MCPServer,
   options: StdioTransportOptions = {}
 ): StdioTransport {
-  const authContext: AuthContext = options.authContext ?? {
+  let authContext: AuthContext = options.authContext ?? {
     type: 'anon',
     id: 'anonymous',
     readonly: true,
+  }
+
+  // Flag to track if auth is being resolved
+  let authPromise: Promise<AuthContext> | null = null
+
+  // Determine auth behavior
+  if (!options.authContext) {
+    if (options.auth) {
+      // Explicit --auth flag: force authentication
+      authPromise = authenticateStdio({
+        noBrowser: options.noBrowser,
+        forceLogin: options.forceLogin,
+      }).then(ctx => {
+        authContext = ctx
+        return ctx
+      })
+    } else if (options.authMode) {
+      // Automatic auth based on server mode
+      authPromise = getAuthForMode(options.authMode, {
+        noBrowser: options.noBrowser,
+        forceLogin: options.forceLogin,
+      }).then(ctx => {
+        authContext = ctx
+        return ctx
+      })
+    }
   }
 
   let buffer = ''
@@ -79,6 +227,11 @@ export function createStdioTransport(
 
   const handleLine = async (line: string): Promise<void> => {
     if (!line.trim()) return
+
+    // Wait for auth to complete if in progress
+    if (authPromise) {
+      await authPromise
+    }
 
     try {
       const request = JSON.parse(line) as JsonRpcRequest

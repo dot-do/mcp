@@ -1,28 +1,21 @@
 /**
- * MCP Server
+ * mcp.do - MCP Managed Service
  *
- * Main entry point for the MCP (Model Context Protocol) server.
- * Exports the three primitives: search, fetch, and do.
+ * This is the service package that provides:
+ * - Transports (HTTP, stdio, SSE)
+ * - Templates (web, database, filesystem, git, memory)
+ * - CLI tooling
+ * - Worker deployment
+ *
+ * For the core library functionality (createMCPServer, tools, scope, auth),
+ * use @dotdo/mcp directly.
  */
 
-// Core types
-export * from './types.js'
+// Re-export everything from core library
+export * from '@dotdo/mcp'
 
-// Server factory
-export { createMCPServer } from './server.js'
-export type { MCPServerWrapper, CreateMCPServerOptions } from './server.js'
-
-// Auth
-export * from './auth/index.js'
-
-// Tools
-export * from './tools/index.js'
-
-// Transports
+// Transports (service-specific)
 export * from './transports/index.js'
 
-// Scope
-export * from './scope/index.js'
-
-// Templates
+// Templates (service-specific configurations)
 export * from './templates/index.js'

@@ -4,25 +4,24 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "lib": ["ES2022"],
-    "types": ["@cloudflare/workers-types", "node"],
-    "outDir": "dist",
-    "rootDir": "src",
+    "types": ["@cloudflare/workers-types"],
     "strict": true,
-    "esModuleInterop": true,
     "skipLibCheck": true,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "noEmit": false,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "paths": {
-      "@dotdo/mcp": ["./core/src/index.ts"],
-      "@dotdo/mcp/*": ["./core/src/*"]
-    }
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "core"]
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }

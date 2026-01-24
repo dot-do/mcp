@@ -34,9 +34,13 @@ describe('Worker Entry Point', () => {
 
   beforeEach(async () => {
     vi.resetModules()
-    // Dynamically import to get fresh instance
+    // Dynamically import and create the app using createMCPServer
     const module = await import('../../src/worker/index.js')
-    app = module.default
+    app = module.createMCPServer({
+      MODE: 'test',
+      ISSUER: 'https://test.mcp.do',
+      DEBUG: 'false'
+    })
   })
 
   describe('Health Check Endpoint', () => {
@@ -67,8 +71,8 @@ describe('Worker Entry Point', () => {
       expect([200, 400, 501]).toContain(response.status)
     })
 
-    it('should handle POST /mcp requests', async () => {
-      const response = await app.request('/mcp', {
+    it('should handle POST /mcp/messages requests', async () => {
+      const response = await app.request('/mcp/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }),
@@ -78,8 +82,8 @@ describe('Worker Entry Point', () => {
       expect([200, 400, 501]).toContain(response.status)
     })
 
-    it('should have MCP endpoint defined', async () => {
-      const response = await app.request('/mcp', {
+    it('should have MCP messages endpoint defined', async () => {
+      const response = await app.request('/mcp/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -100,7 +104,7 @@ describe('Worker Entry Point', () => {
 
   describe('CORS Headers', () => {
     it('should handle OPTIONS requests for CORS preflight', async () => {
-      const response = await app.request('/mcp', {
+      const response = await app.request('/mcp/messages', {
         method: 'OPTIONS',
       })
 
