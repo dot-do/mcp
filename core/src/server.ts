@@ -42,6 +42,7 @@ export interface MCPToolContent {
  * MCP tool response
  */
 export interface MCPToolResponse {
+  [key: string]: unknown
   content: MCPToolContent[]
   isError?: boolean
 }
