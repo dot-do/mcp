@@ -131,13 +131,15 @@ app.route('/', oauthServer)
 - `DOAuthStorage` from @dotdo/do for Durable Object SQLite
 - Custom implementations for D1, KV, Postgres
 
-**Architecture** (breaks circular dependency):
+**Architecture** (dependency chain):
 ```
-@dotdo/oauth (leaf - no deps on oauth.do or @dotdo/do)
-     ↑
-oauth.do (depends on @dotdo/oauth)
-     ↑
-@dotdo/do (depends on oauth.do, provides DOAuthStorage)
+@dotdo/oauth (leaf - pure OAuth 2.1 server, storage interface)
+     ↓
+@dotdo/do (depends on @dotdo/oauth, implements DOAuthStorage)
+     ↓
+oauth.do (depends on @dotdo/do for storage)
+     ↓
+dotdo (depends on oauth.do for auth)
 ```
 
 **Features**:
