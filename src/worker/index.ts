@@ -6,7 +6,8 @@
 
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import type { AuthContext } from '../auth/types.js'
+// AuthContext will be used when implementing the full MCP server
+// import type { AuthContext } from '../auth/types.js'
 
 /**
  * Worker environment bindings
