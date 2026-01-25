@@ -8,9 +8,37 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { z } from 'zod'
-import { evaluate } from 'ai-evaluate'
 import type { SandboxEnv } from 'ai-evaluate'
 import type { MCPServerConfig, AuthConfig } from './types.js'
+
+// Lazily loaded evaluate function - uses any to avoid type conflicts between
+// ai-evaluate and ai-evaluate/node which have slightly different type signatures
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let cachedEvaluate: any = null
+
+/**
+ * Gets the appropriate evaluate function for the current environment.
+ * In Cloudflare Workers (with LOADER binding), uses ai-evaluate.
+ * In Node.js, uses ai-evaluate/node (Miniflare-based).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getEvaluate(env?: SandboxEnv): Promise<any> {
+  if (cachedEvaluate) return cachedEvaluate
+
+  // Check if we're in a Worker environment with LOADER binding
+  const hasLoader = env && typeof env === 'object' && 'LOADER' in env
+
+  if (hasLoader) {
+    const { evaluate } = await import('ai-evaluate')
+    cachedEvaluate = evaluate
+  } else {
+    // Use Node.js version with Miniflare
+    const { evaluate } = await import('ai-evaluate/node')
+    cachedEvaluate = evaluate
+  }
+
+  return cachedEvaluate
+}
 import {
   SearchInputSchema,
   FetchInputSchema,
@@ -258,7 +286,8 @@ ${doScope.types}`,
       const startTime = Date.now()
 
       try {
-        // ai-evaluate uses LOADER if available, falls back to Miniflare in Node.js
+        // Get the right evaluate function for the environment
+        const evaluate = await getEvaluate(sandboxEnv)
         const result = await evaluate({
           script: validatedArgs.code,
           timeout: doScope.timeout,
@@ -302,7 +331,8 @@ ${doScope.types}`,
       const validatedArgs = validateInput(DoInputSchema, args)
       const startTime = Date.now()
 
-      // ai-evaluate uses LOADER if available, falls back to Miniflare in Node.js
+      // Get the right evaluate function for the environment
+      const evaluate = await getEvaluate(sandboxEnv)
       const result = await evaluate({
         script: validatedArgs.code,
         timeout: doScope.timeout,
