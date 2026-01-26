@@ -1,42 +1,50 @@
 /**
  * Validation Module
  *
- * Reusable Zod schemas for runtime validation of MCP tool inputs.
+ * Reusable Valibot schemas for runtime validation of MCP tool inputs.
  * These schemas are used both for MCP SDK schema definitions and runtime validation.
  */
 
-import { z } from 'zod'
+import * as v from 'valibot'
 
 /**
  * Search tool input schema
  */
-export const SearchInputSchema = z.object({
-  query: z.string(),
-  limit: z.number().optional(),
-  offset: z.number().optional(),
+export const SearchInputSchema = v.object({
+  query: v.string(),
+  limit: v.optional(v.number()),
+  offset: v.optional(v.number()),
 })
 
-export type SearchInput = z.infer<typeof SearchInputSchema>
+export type SearchInput = v.InferOutput<typeof SearchInputSchema>
 
 /**
  * Fetch tool input schema
  */
-export const FetchInputSchema = z.object({
-  id: z.string(),
-  includeMetadata: z.boolean().optional(),
-  format: z.string().optional(),
+export const FetchInputSchema = v.object({
+  id: v.string(),
+  includeMetadata: v.optional(v.boolean()),
+  format: v.optional(v.string()),
 })
 
-export type FetchInput = z.infer<typeof FetchInputSchema>
+export type FetchInput = v.InferOutput<typeof FetchInputSchema>
 
 /**
  * Do tool input schema
  */
-export const DoInputSchema = z.object({
-  code: z.string(),
+export const DoInputSchema = v.object({
+  code: v.string(),
 })
 
-export type DoInput = z.infer<typeof DoInputSchema>
+export type DoInput = v.InferOutput<typeof DoInputSchema>
+
+/**
+ * Validation issue type for Valibot
+ */
+export interface ValidationIssue {
+  path?: Array<{ key: unknown }>
+  message: string
+}
 
 /**
  * Validation error class for clearer error messages
@@ -44,7 +52,7 @@ export type DoInput = z.infer<typeof DoInputSchema>
 export class ValidationError extends Error {
   constructor(
     message: string,
-    public readonly issues: z.ZodIssue[]
+    public readonly issues: ValidationIssue[]
   ) {
     super(message)
     this.name = 'ValidationError'
@@ -52,25 +60,30 @@ export class ValidationError extends Error {
 }
 
 /**
- * Parse and validate input using a Zod schema
+ * Parse and validate input using a Valibot schema
  * Throws ValidationError with detailed message on failure
  */
 export function validateInput<T>(
-  schema: z.ZodSchema<T>,
+  schema: v.GenericSchema<unknown, T>,
   input: unknown
 ): T {
-  const result = schema.safeParse(input)
+  const result = v.safeParse(schema, input)
 
   if (!result.success) {
-    const messages = result.error.issues.map(
-      (issue) => `${issue.path.join('.')}: ${issue.message}`
+    const issues = result.issues.map((issue) => ({
+      path: issue.path?.map((p) => ({ key: p.key })),
+      message: issue.message,
+    }))
+
+    const messages = result.issues.map(
+      (issue) => `${issue.path?.map((p) => p.key).join('.') || ''}: ${issue.message}`
     ).join('; ')
 
     throw new ValidationError(
       `Invalid input: ${messages}`,
-      result.error.issues
+      issues
     )
   }
 
-  return result.data
+  return result.output
 }

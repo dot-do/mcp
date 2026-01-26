@@ -1,33 +1,32 @@
 /**
- * MCP Server Factory
+ * MCP Server Factory (Node.js version)
  *
- * Creates MCP server instances using mcp-lite.
- * Provides a high-level API for creating servers with search, fetch, and do tools.
+ * This version uses ai-evaluate/node which includes Miniflare for local development.
+ * For Cloudflare Workers (production), import from '@dotdo/mcp/server' instead.
  */
 
 import { McpServer, StreamableHttpTransport } from 'mcp-lite'
 import type { Ctx as MCPServerContext } from 'mcp-lite'
 import * as v from 'valibot'
 import { toJsonSchema } from '@valibot/to-json-schema'
-import type { SandboxEnv } from 'ai-evaluate'
 import type { MCPServerConfig, AuthConfig } from './types.js'
 
-// Lazily loaded evaluate function for Cloudflare Workers
+// Lazily loaded evaluate function from ai-evaluate/node (Miniflare-based)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let cachedEvaluate: any = null
 
 /**
- * Gets the evaluate function for Cloudflare Workers.
- * For Node.js, use '@dotdo/mcp/node' instead.
+ * Gets the evaluate function for Node.js environments (uses Miniflare).
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getEvaluate(): Promise<any> {
   if (cachedEvaluate) return cachedEvaluate
 
-  const { evaluate } = await import('ai-evaluate')
+  const { evaluate } = await import('ai-evaluate/node')
   cachedEvaluate = evaluate
   return cachedEvaluate
 }
+
 import {
   SearchInputSchema,
   FetchInputSchema,
@@ -36,15 +35,13 @@ import {
 } from './validation.js'
 
 /**
- * Options for creating an MCP server
+ * Options for creating an MCP server (Node.js version)
  */
 export interface CreateMCPServerOptions {
   /** Server name (default: 'mcp-server') */
   name?: string
   /** Server version (default: '1.0.0') */
   version?: string
-  /** Worker environment with LOADER binding for sandboxed code execution */
-  env?: SandboxEnv
 }
 
 /**
@@ -158,7 +155,10 @@ export interface MCPServerWrapper {
 }
 
 /**
- * Create an MCP server from configuration
+ * Create an MCP server from configuration (Node.js version with Miniflare)
+ *
+ * This version uses ai-evaluate/node which includes Miniflare for local sandbox execution.
+ * For Cloudflare Workers (production), use createMCPServer from '@dotdo/mcp/server' instead.
  *
  * @param config - Server configuration with search, fetch, and do functions
  * @param options - Optional server options
@@ -168,7 +168,7 @@ export function createMCPServer(
   config: MCPServerConfig,
   options: CreateMCPServerOptions = {}
 ): MCPServerWrapper {
-  const { name = 'mcp-server', version = '0.1.0', env: sandboxEnv } = options
+  const { name = 'mcp-server', version = '0.1.0' } = options
   const { search, fetch, do: doScope, auth: authConfig } = config
 
   // Create the McpServer instance with Valibot schema adapter
@@ -261,14 +261,14 @@ ${doScope.types}`,
       const startTime = Date.now()
 
       try {
-        // Get the evaluate function (Workers version)
+        // Get the evaluate function (Node.js/Miniflare version)
         const evaluate = await getEvaluate()
         const result = await evaluate({
           script: validatedArgs.code,
           timeout: doScope.timeout,
           fetch: doScope.permissions?.allowNetwork ? undefined : null,
-          rpc: doScope.bindings, // Pass domain bindings via RPC
-        }, sandboxEnv)
+          rpc: doScope.bindings,
+        })
 
         const duration = Date.now() - startTime
 
@@ -306,14 +306,14 @@ ${doScope.types}`,
       const validatedArgs = validateInput(DoInputSchema, args)
       const startTime = Date.now()
 
-      // Get the evaluate function (Workers version)
+      // Get the evaluate function (Node.js/Miniflare version)
       const evaluate = await getEvaluate()
       const result = await evaluate({
         script: validatedArgs.code,
         timeout: doScope.timeout,
         fetch: doScope.permissions?.allowNetwork ? undefined : null,
         rpc: doScope.bindings,
-      }, sandboxEnv)
+      })
 
       const duration = Date.now() - startTime
       return {

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import * as v from 'valibot'
 import type { MCPServerConfig, DoScope, SearchResult, FetchResult } from './types.js'
 
 describe('createMCPServer', () => {
@@ -44,20 +45,22 @@ describe('createMCPServer', () => {
       expect(typeof server).toBe('object')
     })
 
-    it('should return server with connect method', async () => {
+    it('should return server with getHttpHandler method', async () => {
       const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
-      expect(server.connect).toBeDefined()
-      expect(typeof server.connect).toBe('function')
+      expect(server.getHttpHandler).toBeDefined()
+      expect(typeof server.getHttpHandler).toBe('function')
     })
 
-    it('should return server with close method', async () => {
+    it('should return server with isConnected method', async () => {
       const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
-      expect(server.close).toBeDefined()
-      expect(typeof server.close).toBe('function')
+      expect(server.isConnected).toBeDefined()
+      expect(typeof server.isConnected).toBe('function')
+      // mcp-lite is always "connected" since it's HTTP-based
+      expect(server.isConnected()).toBe(true)
     })
   })
 
@@ -164,7 +167,8 @@ describe('createMCPServer', () => {
 
   describe('do tool execution', () => {
     it('should execute code and return DoResult format', async () => {
-      const { createMCPServer } = await import('./server.js')
+      // Use server-node.js for Node.js environments (has Miniflare fallback)
+      const { createMCPServer } = await import('./server-node.js')
       const server = createMCPServer(testConfig)
 
       // Execute simple code that returns a value
@@ -178,7 +182,8 @@ describe('createMCPServer', () => {
     })
 
     it('should pass timeout to evaluate', async () => {
-      const { createMCPServer } = await import('./server.js')
+      // Use server-node.js for Node.js environments (has Miniflare fallback)
+      const { createMCPServer } = await import('./server-node.js')
       const configWithTimeout: MCPServerConfig = {
         ...testConfig,
         do: {
@@ -197,59 +202,17 @@ describe('createMCPServer', () => {
     })
   })
 
-  describe('connect and close lifecycle', () => {
-    it('should connect to a transport', async () => {
-      const { createMCPServer } = await import('./server.js')
-      const server = createMCPServer(testConfig)
-
-      // Create a mock transport
-      const mockTransport = {
-        start: vi.fn().mockResolvedValue(undefined),
-        close: vi.fn().mockResolvedValue(undefined),
-        send: vi.fn(),
-        onmessage: undefined as ((message: unknown) => void) | undefined,
-        onerror: undefined as ((error: Error) => void) | undefined,
-        onclose: undefined as (() => void) | undefined,
-      }
-
-      await server.connect(mockTransport)
-
-      // Server should be connected
-      expect(server.isConnected()).toBe(true)
-    })
-
-    it('should close connection properly', async () => {
-      const { createMCPServer } = await import('./server.js')
-      const server = createMCPServer(testConfig)
-
-      const mockTransport = {
-        start: vi.fn().mockResolvedValue(undefined),
-        close: vi.fn().mockResolvedValue(undefined),
-        send: vi.fn(),
-        onmessage: undefined as ((message: unknown) => void) | undefined,
-        onerror: undefined as ((error: Error) => void) | undefined,
-        onclose: undefined as (() => void) | undefined,
-      }
-
-      await server.connect(mockTransport)
-      await server.close()
-
-      // After close, the transport close should have been called
-      expect(mockTransport.close).toHaveBeenCalled()
-    })
-  })
-
   describe('MCPServer interface', () => {
     it('should expose underlying McpServer instance', async () => {
       const { createMCPServer } = await import('./server.js')
       const server = createMCPServer(testConfig)
 
-      // Should have access to the underlying MCP SDK server
+      // Should have access to the underlying MCP server
       expect(server.server).toBeDefined()
     })
   })
 
-  describe('input validation with Zod', () => {
+  describe('input validation with Valibot', () => {
     describe('search tool validation', () => {
       it('should reject non-string query', async () => {
         const { createMCPServer } = await import('./server.js')
@@ -384,9 +347,14 @@ describe('createToolRegistrar', () => {
 
   it('should return a registrar object with registerTool method', async () => {
     const { createToolRegistrar } = await import('./server.js')
-    const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js')
+    const { McpServer } = await import('mcp-lite')
+    const { toJsonSchema } = await import('@valibot/to-json-schema')
 
-    const mcpServer = new McpServer({ name: 'test', version: '0.1.0' })
+    const mcpServer = new McpServer({
+      name: 'test',
+      version: '0.1.0',
+      schemaAdapter: (schema) => toJsonSchema(schema as v.GenericSchema),
+    })
     const registrar = createToolRegistrar(mcpServer)
 
     expect(registrar).toHaveProperty('registerTool')
@@ -395,15 +363,19 @@ describe('createToolRegistrar', () => {
 
   it('should track registered tool names', async () => {
     const { createToolRegistrar } = await import('./server.js')
-    const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js')
-    const { z } = await import('zod')
+    const { McpServer } = await import('mcp-lite')
+    const { toJsonSchema } = await import('@valibot/to-json-schema')
 
-    const mcpServer = new McpServer({ name: 'test', version: '0.1.0' })
+    const mcpServer = new McpServer({
+      name: 'test',
+      version: '0.1.0',
+      schemaAdapter: (schema) => toJsonSchema(schema as v.GenericSchema),
+    })
     const registrar = createToolRegistrar(mcpServer)
 
     registrar.registerTool('test-tool', {
       description: 'A test tool',
-      inputSchema: { query: z.string() },
+      inputSchema: v.object({ query: v.string() }),
       mcpHandler: async () => ({ content: [{ type: 'text' as const, text: 'ok' }] }),
       directHandler: async () => 'ok',
     })
@@ -413,15 +385,19 @@ describe('createToolRegistrar', () => {
 
   it('should allow direct tool calls via callTool', async () => {
     const { createToolRegistrar } = await import('./server.js')
-    const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js')
-    const { z } = await import('zod')
+    const { McpServer } = await import('mcp-lite')
+    const { toJsonSchema } = await import('@valibot/to-json-schema')
 
-    const mcpServer = new McpServer({ name: 'test', version: '0.1.0' })
+    const mcpServer = new McpServer({
+      name: 'test',
+      version: '0.1.0',
+      schemaAdapter: (schema) => toJsonSchema(schema as v.GenericSchema),
+    })
     const registrar = createToolRegistrar(mcpServer)
 
     registrar.registerTool('echo', {
       description: 'Echo tool',
-      inputSchema: { message: z.string() },
+      inputSchema: v.object({ message: v.string() }),
       mcpHandler: async (args) => ({ content: [{ type: 'text' as const, text: args.message as string }] }),
       directHandler: async (args) => args.message,
     })
@@ -432,9 +408,14 @@ describe('createToolRegistrar', () => {
 
   it('should throw for unknown tool in callTool', async () => {
     const { createToolRegistrar } = await import('./server.js')
-    const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js')
+    const { McpServer } = await import('mcp-lite')
+    const { toJsonSchema } = await import('@valibot/to-json-schema')
 
-    const mcpServer = new McpServer({ name: 'test', version: '0.1.0' })
+    const mcpServer = new McpServer({
+      name: 'test',
+      version: '0.1.0',
+      schemaAdapter: (schema) => toJsonSchema(schema as v.GenericSchema),
+    })
     const registrar = createToolRegistrar(mcpServer)
 
     await expect(

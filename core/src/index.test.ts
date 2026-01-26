@@ -31,11 +31,11 @@ describe('index exports', () => {
       const server = createMCPServer(config)
       expect(server).toBeDefined()
       expect(server.server).toBeDefined()
-      expect(server.connect).toBeDefined()
-      expect(server.close).toBeDefined()
+      expect(server.getHttpHandler).toBeDefined()
       expect(server.isConnected).toBeDefined()
       expect(server.getRegisteredTools).toBeDefined()
       expect(server.callTool).toBeDefined()
+      expect(server.getAuthConfig).toBeDefined()
     })
   })
 
