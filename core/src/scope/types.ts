@@ -9,21 +9,22 @@ export interface DoPermissions {
 }
 
 /**
- * Configuration for bindings available in the sandbox.
- * Bindings can be functions or objects that will be injected into the sandbox.
- */
-export type Binding = ((...args: unknown[]) => unknown) | object
-
-/**
  * The scope configuration for the Do tool.
  * Defines what functions and objects are available in the sandbox,
  * along with their TypeScript type definitions.
  */
 export interface DoScope {
   /**
-   * Bindings to inject into the sandbox.
-   * Keys are the names used in the sandbox, values are the functions/objects.
-   * For per-request bindings, use MCPServerWrapper.setRequestBindings() before handling requests.
+   * Service bindings to pass to the sandbox worker.
+   * These are passed via the worker_loaders env and support Workers RPC.
+   * Keys become properties on env in the sandbox (e.g., env.COLLECTIONS).
+   *
+   * @example
+   * ```ts
+   * bindings: {
+   *   COLLECTIONS: env.COLLECTIONS  // Service binding with RPC methods
+   * }
+   * ```
    */
   bindings: Record<string, unknown>
 
@@ -32,6 +33,13 @@ export interface DoScope {
    * Used by the LLM to generate correctly typed code.
    */
   types: string
+
+  /**
+   * Module code that defines exports available to the script.
+   * Exports become globals in the script scope.
+   * Example: `exports.collection = (name) => ({ list: () => fetch('...') })`
+   */
+  module?: string
 
   /** Optional execution timeout in milliseconds */
   timeout?: number

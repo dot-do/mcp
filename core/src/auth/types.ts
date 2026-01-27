@@ -30,11 +30,33 @@ export interface AuthContext {
 export type AuthMode = 'anon' | 'anon+auth' | 'auth-required'
 
 /**
+ * OAuth service binding with RPC methods
+ */
+export interface OAuthService {
+  /** Introspect a token via Workers RPC */
+  introspect(token: string): Promise<{
+    active: boolean
+    sub?: string
+    client_id?: string
+    scope?: string
+    exp?: number
+    iat?: number
+    iss?: string
+    aud?: string | string[]
+    [key: string]: unknown
+  }>
+  /** HTTP fetch handler */
+  fetch(request: Request): Promise<Response>
+}
+
+/**
  * OAuth configuration for token introspection
  */
 export interface OAuthConfig {
-  /** URL for OAuth 2.0 token introspection endpoint */
-  introspectionUrl: string
+  /** Service binding with introspect RPC method (preferred) */
+  service?: OAuthService
+  /** URL for OAuth 2.0 token introspection endpoint (fallback) */
+  introspectionUrl?: string
   /** Client ID for introspection authentication (optional) */
   clientId?: string
   /** Client secret for introspection authentication (optional) */

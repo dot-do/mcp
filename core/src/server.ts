@@ -9,25 +9,9 @@ import { McpServer, StreamableHttpTransport } from 'mcp-lite'
 import type { Ctx as MCPServerContext } from 'mcp-lite'
 import * as v from 'valibot'
 import { toJsonSchema } from '@valibot/to-json-schema'
-import type { SandboxEnv } from 'ai-evaluate'
+import { evaluate } from './sandbox.js'
+import type { SandboxEnv } from './sandbox.js'
 import type { MCPServerConfig, AuthConfig } from './types.js'
-
-// Lazily loaded evaluate function for Cloudflare Workers
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let cachedEvaluate: any = null
-
-/**
- * Gets the evaluate function for Cloudflare Workers.
- * For Node.js, use '@dotdo/mcp/node' instead.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getEvaluate(): Promise<any> {
-  if (cachedEvaluate) return cachedEvaluate
-
-  const { evaluate } = await import('ai-evaluate')
-  cachedEvaluate = evaluate
-  return cachedEvaluate
-}
 import {
   SearchInputSchema,
   FetchInputSchema,
@@ -157,8 +141,8 @@ export interface MCPServerWrapper {
   getAuthConfig(): AuthConfig | undefined
   /**
    * Set request-scoped bindings for the do tool.
-   * Call this before handling each request to provide per-request bindings.
-   * These bindings are merged with static bindings (request bindings take precedence).
+   * Call this before handling each request to provide per-request service bindings.
+   * These bindings are passed to the sandbox via Workers RPC and merged with static bindings.
    */
   setRequestBindings(bindings: Record<string, unknown>): void
   /** Clear request-scoped bindings after handling a request */
@@ -272,17 +256,15 @@ ${doScope.types}`,
       const startTime = Date.now()
 
       try {
-        // Get the evaluate function (Workers version)
-        const evaluate = await getEvaluate()
-
         // Build bindings - start with static, add request-scoped bindings (takes precedence)
         const bindings = { ...doScope.bindings, ...requestBindings }
 
         const result = await evaluate({
           script: validatedArgs.code,
+          module: doScope.module, // Module exports become globals in script
           timeout: doScope.timeout,
           fetch: doScope.permissions?.allowNetwork ? undefined : null,
-          rpc: bindings, // Pass merged bindings via RPC
+          bindings, // Pass service bindings directly (Workers RPC)
         }, sandboxEnv)
 
         const duration = Date.now() - startTime
@@ -321,13 +303,12 @@ ${doScope.types}`,
       const validatedArgs = validateInput(DoInputSchema, args)
       const startTime = Date.now()
 
-      // Get the evaluate function (Workers version)
-      const evaluate = await getEvaluate()
       const result = await evaluate({
         script: validatedArgs.code,
+        module: doScope.module,
         timeout: doScope.timeout,
         fetch: doScope.permissions?.allowNetwork ? undefined : null,
-        rpc: doScope.bindings, // Direct handler uses static bindings only
+        bindings: doScope.bindings, // Direct handler uses static bindings only
       }, sandboxEnv)
 
       const duration = Date.now() - startTime

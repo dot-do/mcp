@@ -45,8 +45,10 @@ export interface OAuthProvider {
 /**
  * Perform OAuth 2.0 token introspection
  *
+ * Uses Workers RPC if service binding is provided, falls back to HTTP.
+ *
  * @param token - The token to introspect
- * @param config - OAuth configuration with introspection URL
+ * @param config - OAuth configuration with service binding or introspection URL
  * @returns The introspection response
  * @throws Error if introspection fails
  */
@@ -54,6 +56,23 @@ export async function introspectToken(
   token: string,
   config: OAuthConfig
 ): Promise<IntrospectionResponse> {
+  // Prefer Workers RPC via service binding
+  if (config.service) {
+    try {
+      const result = await config.service.introspect(token)
+      return result as IntrospectionResponse
+    } catch (error) {
+      throw new Error(
+        `RPC introspection failed: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+  }
+
+  // Fallback to HTTP introspection
+  if (!config.introspectionUrl) {
+    throw new Error('OAuth config requires either service binding or introspectionUrl')
+  }
+
   const body = new URLSearchParams()
   body.set('token', token)
 

@@ -6,41 +6,6 @@
   "compatibility_date": "2026-01-01",
   "compatibility_flags": ["nodejs_compat"],
 
-  // Migration to delete old Durable Object classes
-  "migrations": [
-    {
-      "tag": "v8",
-      "deleted_classes": ["PublicMcpAgent", "RateLimiter"]
-    }
-  ],
-
-  // Dynamic Worker Loader for ai-evaluate sandboxed execution
-  "worker_loaders": [
-    {
-      "binding": "LOADER"
-    }
-  ],
-
-  // Service bindings
-  "services": [
-    {
-      "binding": "OAUTH",
-      "service": "oauth"
-    },
-    {
-      "binding": "COLLECTIONS",
-      "service": "collections-do"
-    }
-  ],
-
-  // Default environment variables
-  "vars": {
-    "MODE": "test",
-    "ISSUER": "https://oauth.do",
-    "OAUTH_INTROSPECTION_URL": "https://oauth.do/introspect",
-    "DEBUG": "true"
-  },
-
   // Local development
   "dev": {
     "port": 8787,
@@ -55,14 +20,16 @@
   },
 
   // --- Test Environment - test.mcp.do ---
-  // Uses oauth.do for auth (test mode with dev mode users)
   "env": {
     "test": {
       "name": "mcp-test",
+      "worker_loaders": [{ "binding": "LOADER" }],
+      "services": [
+        { "binding": "OAUTH", "service": "oauth" },
+        { "binding": "COLLECTIONS", "service": "collections-do" }
+      ],
       "vars": {
         "MODE": "test",
-        "ISSUER": "https://oauth.do",
-        "OAUTH_INTROSPECTION_URL": "https://oauth.do/introspect",
         "DEBUG": "true"
       },
       "routes": [
@@ -74,13 +41,15 @@
     },
 
     // --- Dev Environment - dev.mcp.do ---
-    // Uses oauth.do for auth
     "dev": {
       "name": "mcp-dev",
+      "worker_loaders": [{ "binding": "LOADER" }],
+      "services": [
+        { "binding": "OAUTH", "service": "oauth" },
+        { "binding": "COLLECTIONS", "service": "collections-do" }
+      ],
       "vars": {
         "MODE": "dev",
-        "ISSUER": "https://oauth.do",
-        "OAUTH_INTROSPECTION_URL": "https://oauth.do/introspect",
         "DEBUG": "true"
       },
       "routes": [
@@ -92,13 +61,15 @@
     },
 
     // --- Production Environment - mcp.do ---
-    // Uses oauth.do for auth
     "production": {
       "name": "mcp-production",
+      "worker_loaders": [{ "binding": "LOADER" }],
+      "services": [
+        { "binding": "OAUTH", "service": "oauth" },
+        { "binding": "COLLECTIONS", "service": "collections-do" }
+      ],
       "vars": {
         "MODE": "production",
-        "ISSUER": "https://oauth.do",
-        "OAUTH_INTROSPECTION_URL": "https://oauth.do/introspect",
         "DEBUG": "false"
       },
       "routes": [
