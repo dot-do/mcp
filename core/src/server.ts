@@ -1,23 +1,16 @@
 /**
  * MCP Server Factory
  *
- * Creates MCP server instances using mcp-lite.
+ * Creates MCP server instances using the official @modelcontextprotocol/sdk.
  * Provides a high-level API for creating servers with search, fetch, and do tools.
  */
 
-import { McpServer, StreamableHttpTransport } from 'mcp-lite'
-import type { Ctx as MCPServerContext } from 'mcp-lite'
-import * as v from 'valibot'
-import { toJsonSchema } from '@valibot/to-json-schema'
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
+import { z } from 'zod'
 import { evaluate } from './sandbox.js'
 import type { SandboxEnv } from './sandbox.js'
 import type { MCPServerConfig, AuthConfig } from './types.js'
-import {
-  SearchInputSchema,
-  FetchInputSchema,
-  DoInputSchema,
-  validateInput,
-} from './validation.js'
 
 /**
  * Options for creating an MCP server
@@ -32,106 +25,14 @@ export interface CreateMCPServerOptions {
 }
 
 /**
- * MCP tool response content
- */
-export interface MCPToolContent {
-  type: 'text'
-  text: string
-}
-
-/**
- * MCP tool response
- */
-export interface MCPToolResponse {
-  [key: string]: unknown
-  content: MCPToolContent[]
-  isError?: boolean
-}
-
-/**
- * Tool registration configuration
- */
-export interface ToolRegistrationConfig<TInput = Record<string, unknown>> {
-  /** Tool description */
-  description: string
-  /** Valibot input schema */
-  inputSchema: v.GenericSchema<unknown, TInput>
-  /** Handler for MCP protocol responses */
-  mcpHandler: (args: TInput, ctx: MCPServerContext) => Promise<MCPToolResponse>
-  /** Handler for direct tool calls (returns raw data) */
-  directHandler: (args: TInput) => Promise<unknown>
-}
-
-/**
- * Tool registrar interface
- */
-export interface ToolRegistrar {
-  /** Register a tool with both MCP and direct handlers */
-  registerTool<TInput = Record<string, unknown>>(
-    name: string,
-    config: ToolRegistrationConfig<TInput>
-  ): void
-  /** Get list of registered tool names */
-  getRegisteredTools(): string[]
-  /** Call a tool directly (for testing) */
-  callTool(name: string, args: Record<string, unknown>): Promise<unknown>
-}
-
-/**
- * Creates a tool registrar that manages tool registration and handlers
- *
- * @param mcpServer - The MCP server instance to register tools with
- * @returns A tool registrar object
- */
-export function createToolRegistrar(mcpServer: McpServer): ToolRegistrar {
-  const registeredTools: string[] = []
-  const toolHandlers: Map<
-    string,
-    (args: Record<string, unknown>) => Promise<unknown>
-  > = new Map()
-
-  return {
-    registerTool<TInput = Record<string, unknown>>(
-      name: string,
-      config: ToolRegistrationConfig<TInput>
-    ): void {
-      // Register with MCP server using mcp-lite's tool() method
-      mcpServer.tool(name, {
-        description: config.description,
-        inputSchema: config.inputSchema,
-        handler: async (args, ctx) => config.mcpHandler(args as TInput, ctx),
-      })
-
-      // Track registered tools
-      registeredTools.push(name)
-
-      // Store direct handler
-      toolHandlers.set(name, async (args) => config.directHandler(args as TInput))
-    },
-
-    getRegisteredTools(): string[] {
-      return [...registeredTools]
-    },
-
-    async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-      const handler = toolHandlers.get(name)
-      if (!handler) {
-        throw new Error(`Unknown tool: ${name}`)
-      }
-      return handler(args)
-    },
-  }
-}
-
-/**
  * Wrapper interface for MCP server with additional helper methods
  */
 export interface MCPServerWrapper {
   /** The underlying McpServer instance */
   server: McpServer
-  /** Get the HTTP handler from the transport */
-  getHttpHandler(): ReturnType<StreamableHttpTransport['bind']>
-  /** Check if the server is connected (always true for mcp-lite) */
+  /** Get the HTTP handler function */
+  getHttpHandler(): (request: Request) => Promise<Response>
+  /** Check if the server is connected */
   isConnected(): boolean
   /** Get list of registered tool names */
   getRegisteredTools(): string[]
@@ -166,29 +67,35 @@ export function createMCPServer(
   // Request-scoped bindings storage (set per-request, cleared after)
   let requestBindings: Record<string, unknown> = {}
 
-  // Create the McpServer instance with Valibot schema adapter
-  const mcpServer = new McpServer({
-    name,
-    version,
-    schemaAdapter: (schema) => toJsonSchema(schema as v.GenericSchema),
-  })
+  // Track registered tools
+  const registeredTools: string[] = []
 
-  // Create tool registrar for DRY tool registration
-  const registrar = createToolRegistrar(mcpServer)
+  // Store direct handlers for testing
+  const toolHandlers: Map<string, (args: Record<string, unknown>) => Promise<unknown>> = new Map()
+
+  // Create the McpServer instance
+  const mcpServer = new McpServer(
+    { name, version },
+    {
+      capabilities: {
+        tools: {},
+      },
+    }
+  )
 
   // Register the search tool
-  registrar.registerTool('search', {
-    description: 'Search for information in the knowledge base',
-    inputSchema: v.object({
-      query: v.pipe(v.string(), v.description('The search query')),
-      limit: v.optional(v.pipe(v.number(), v.description('Maximum number of results'))),
-      offset: v.optional(v.pipe(v.number(), v.description('Number of results to skip'))),
-    }),
-    mcpHandler: async (args) => {
-      const validatedArgs = validateInput(SearchInputSchema, args)
-      const results = await search(validatedArgs.query, {
-        limit: validatedArgs.limit,
-        offset: validatedArgs.offset,
+  mcpServer.tool(
+    'search',
+    'Search for information in the knowledge base',
+    {
+      query: z.string().describe('The search query'),
+      limit: z.number().optional().describe('Maximum number of results'),
+      offset: z.number().optional().describe('Number of results to skip'),
+    },
+    async (args) => {
+      const results = await search(args.query, {
+        limit: args.limit,
+        offset: args.offset,
       })
 
       return {
@@ -199,29 +106,29 @@ export function createMCPServer(
           },
         ],
       }
-    },
-    directHandler: async (args) => {
-      const validatedArgs = validateInput(SearchInputSchema, args)
-      return search(validatedArgs.query, {
-        limit: validatedArgs.limit,
-        offset: validatedArgs.offset,
-      })
-    },
+    }
+  )
+  registeredTools.push('search')
+  toolHandlers.set('search', async (args) => {
+    return search(args.query as string, {
+      limit: args.limit as number | undefined,
+      offset: args.offset as number | undefined,
+    })
   })
 
   // Register the fetch tool
-  registrar.registerTool('fetch', {
-    description: 'Fetch a resource by its identifier',
-    inputSchema: v.object({
-      id: v.pipe(v.string(), v.description('The resource identifier')),
-      includeMetadata: v.optional(v.pipe(v.boolean(), v.description('Include metadata in response'))),
-      format: v.optional(v.pipe(v.string(), v.description('Desired format of the content'))),
-    }),
-    mcpHandler: async (args) => {
-      const validatedArgs = validateInput(FetchInputSchema, args)
-      const result = await fetch(validatedArgs.id, {
-        includeMetadata: validatedArgs.includeMetadata,
-        format: validatedArgs.format,
+  mcpServer.tool(
+    'fetch',
+    'Fetch a resource by its identifier',
+    {
+      id: z.string().describe('The resource identifier'),
+      includeMetadata: z.boolean().optional().describe('Include metadata in response'),
+      format: z.string().optional().describe('Desired format of the content'),
+    },
+    async (args) => {
+      const result = await fetch(args.id, {
+        includeMetadata: args.includeMetadata,
+        format: args.format,
       })
 
       return {
@@ -232,27 +139,27 @@ export function createMCPServer(
           },
         ],
       }
-    },
-    directHandler: async (args) => {
-      const validatedArgs = validateInput(FetchInputSchema, args)
-      return fetch(validatedArgs.id, {
-        includeMetadata: validatedArgs.includeMetadata,
-        format: validatedArgs.format,
-      })
-    },
+    }
+  )
+  registeredTools.push('fetch')
+  toolHandlers.set('fetch', async (args) => {
+    return fetch(args.id as string, {
+      includeMetadata: args.includeMetadata as boolean | undefined,
+      format: args.format as string | undefined,
+    })
   })
 
   // Register the do tool
-  registrar.registerTool('do', {
-    description: `Execute TypeScript code in a sandboxed environment.
+  mcpServer.tool(
+    'do',
+    `Execute TypeScript code in a sandboxed environment.
 
 Available bindings:
 ${doScope.types}`,
-    inputSchema: v.object({
-      code: v.pipe(v.string(), v.description('TypeScript code to execute')),
-    }),
-    mcpHandler: async (args) => {
-      const validatedArgs = validateInput(DoInputSchema, args)
+    {
+      code: z.string().describe('TypeScript code to execute'),
+    },
+    async (args) => {
       const startTime = Date.now()
 
       try {
@@ -260,11 +167,11 @@ ${doScope.types}`,
         const bindings = { ...doScope.bindings, ...requestBindings }
 
         const result = await evaluate({
-          script: validatedArgs.code,
-          module: doScope.module, // Module exports become globals in script
+          script: args.code,
+          module: doScope.module,
           timeout: doScope.timeout,
           fetch: doScope.permissions?.allowNetwork ? undefined : null,
-          bindings, // Pass service bindings directly (Workers RPC)
+          bindings,
         }, sandboxEnv)
 
         const duration = Date.now() - startTime
@@ -285,8 +192,7 @@ ${doScope.types}`,
         }
       } catch (error) {
         const duration = Date.now() - startTime
-        const errorMessage =
-          error instanceof Error ? error.message : String(error)
+        const errorMessage = error instanceof Error ? error.message : String(error)
 
         return {
           content: [
@@ -298,51 +204,57 @@ ${doScope.types}`,
           isError: true,
         }
       }
-    },
-    directHandler: async (args) => {
-      const validatedArgs = validateInput(DoInputSchema, args)
-      const startTime = Date.now()
-
-      const result = await evaluate({
-        script: validatedArgs.code,
-        module: doScope.module,
-        timeout: doScope.timeout,
-        fetch: doScope.permissions?.allowNetwork ? undefined : null,
-        bindings: doScope.bindings, // Direct handler uses static bindings only
-      }, sandboxEnv)
-
-      const duration = Date.now() - startTime
-      return {
-        success: result.success,
-        value: result.value,
-        logs: result.logs,
-        duration,
-      }
-    },
+    }
+  )
+  registeredTools.push('do')
+  toolHandlers.set('do', async (args) => {
+    const startTime = Date.now()
+    const result = await evaluate({
+      script: args.code as string,
+      module: doScope.module,
+      timeout: doScope.timeout,
+      fetch: doScope.permissions?.allowNetwork ? undefined : null,
+      bindings: doScope.bindings,
+    }, sandboxEnv)
+    const duration = Date.now() - startTime
+    return {
+      success: result.success,
+      value: result.value,
+      logs: result.logs,
+      duration,
+    }
   })
 
-  // Create HTTP transport
-  const transport = new StreamableHttpTransport()
+  // Create the transport - stateless for Cloudflare Workers
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined, // Stateless mode
+    enableJsonResponse: true,
+  })
+
+  // Connect the server to the transport
+  mcpServer.connect(transport)
 
   return {
     server: mcpServer,
 
-    getHttpHandler(): ReturnType<StreamableHttpTransport['bind']> {
-      return transport.bind(mcpServer)
+    getHttpHandler(): (request: Request) => Promise<Response> {
+      return (request: Request) => transport.handleRequest(request)
     },
 
     isConnected(): boolean {
-      // mcp-lite doesn't have a persistent connection model like the SDK
-      // It handles each HTTP request independently
-      return true
+      return mcpServer.isConnected()
     },
 
     getRegisteredTools(): string[] {
-      return registrar.getRegisteredTools()
+      return [...registeredTools]
     },
 
     async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-      return registrar.callTool(name, args)
+      const handler = toolHandlers.get(name)
+      if (!handler) {
+        throw new Error(`Unknown tool: ${name}`)
+      }
+      return handler(args)
     },
 
     getAuthConfig(): AuthConfig | undefined {

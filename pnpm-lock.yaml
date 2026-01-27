@@ -57,6 +57,9 @@ importers:
 
   core:
     dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.25.3
+        version: 1.25.3(hono@4.11.5)(zod@4.3.6)
       '@valibot/to-json-schema':
         specifier: ^1.0.1
         version: 1.5.0(valibot@1.2.0(typescript@5.9.3))
@@ -66,12 +69,12 @@ importers:
       hono:
         specifier: ^4.11.5
         version: 4.11.5
-      mcp-lite:
-        specifier: ^0.3.0
-        version: 0.3.0
       valibot:
         specifier: ^1.1.0
         version: 1.2.0(typescript@5.9.3)
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.8.0
@@ -1458,9 +1461,6 @@ packages:
   '@speed-highlight/core@1.2.14':
     resolution: {integrity: sha512-G4ewlBNhUtlLvrJTb88d2mdy2KRijzs4UhnlrOSRT4bmjh/IqNElZa3zkrZ+TC47TwtlDWzVLFADljF1Ijp5hA==}
 
-  '@standard-schema/spec@1.1.0':
-    resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
-
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
@@ -2158,9 +2158,6 @@ packages:
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
-
-  mcp-lite@0.3.0:
-    resolution: {integrity: sha512-NBrwSOmwaylakhCL5WELEsiYPoqrG4m+qKt6sXFg+uldnU68WJTj2e25XIguC51LclyVk1SpGjZkA0MAq23QvQ==}
 
   media-typer@1.1.0:
     resolution: {integrity: sha512-aisnrDP4GNe06UcKFnV5bfMNPBUw4jsLGaWwWfnH3v02GnBuXX2MCVn5RbrWo0j3pczUilYblq7fQ7Nw2t5XKw==}
@@ -3630,8 +3627,6 @@ snapshots:
 
   '@speed-highlight/core@1.2.14': {}
 
-  '@standard-schema/spec@1.1.0': {}
-
   '@types/estree@1.0.8': {}
 
   '@types/json-schema@7.0.15': {}
@@ -4475,10 +4470,6 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   math-intrinsics@1.1.0: {}
-
-  mcp-lite@0.3.0:
-    dependencies:
-      '@standard-schema/spec': 1.1.0
 
   media-typer@1.1.0: {}
 

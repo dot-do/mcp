@@ -15,10 +15,6 @@
       "types": "./dist/server.d.ts",
       "import": "./dist/server.js"
     },
-    "./node": {
-      "types": "./dist/server-node.d.ts",
-      "import": "./dist/server-node.js"
-    },
     "./tools": {
       "types": "./dist/tools/index.d.ts",
       "import": "./dist/tools/index.js"
@@ -69,11 +65,12 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.3",
     "@valibot/to-json-schema": "^1.0.1",
     "ai-evaluate": "^2.1.8",
     "hono": "^4.11.5",
-    "mcp-lite": "^0.3.0",
-    "valibot": "^1.1.0"
+    "valibot": "^1.1.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.8.0",
