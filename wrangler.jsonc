@@ -6,6 +6,17 @@
   "compatibility_date": "2026-01-01",
   "compatibility_flags": ["nodejs_compat"],
 
+  // Base config for default "mcp" worker (used by collections.do service binding)
+  "worker_loaders": [{ "binding": "LOADER" }],
+  "services": [
+    { "binding": "OAUTH", "service": "oauth" },
+    { "binding": "COLLECTIONS", "service": "collections-do" }
+  ],
+  "vars": {
+    "MODE": "test",
+    "DEBUG": "true"
+  },
+
   // Local development
   "dev": {
     "port": 8787,
