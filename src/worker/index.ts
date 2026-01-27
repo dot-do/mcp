@@ -1,14 +1,15 @@
 /**
  * MCP Server - Cloudflare Worker Entry Point
  *
- * Serves as an OAuth 2.1 authorization server for MCP clients (Claude, ChatGPT, etc.)
- * and provides MCP protocol endpoints.
+ * Routes OAuth requests to oauth.do and provides MCP protocol endpoints.
+ * Uses oauth.do as the centralized OAuth 2.1 authorization server.
  */
 
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { createOAuth21Server, MemoryOAuthStorage } from '@dotdo/oauth'
-import type { OAuth21Server, DevModeConfig } from '@dotdo/oauth'
+import { authMiddleware } from '@dotdo/mcp/auth'
+import { createMCPServer } from '@dotdo/mcp'
+import type { AuthConfig } from '@dotdo/mcp/auth'
 
 /**
  * Worker environment bindings
@@ -16,85 +17,141 @@ import type { OAuth21Server, DevModeConfig } from '@dotdo/oauth'
 export interface Env {
   /** Server mode: 'test' | 'dev' | 'production' */
   MODE: 'test' | 'dev' | 'production'
-  /** Server issuer URL */
+  /** OAuth issuer URL (oauth.do) */
   ISSUER: string
-  /** WorkOS API key (for dev/production modes) */
-  WORKOS_API_KEY?: string
-  /** WorkOS client ID (for dev/production modes) */
-  WORKOS_CLIENT_ID?: string
+  /** OAuth introspection URL */
+  OAUTH_INTROSPECTION_URL: string
+  /** Service binding to oauth.do */
+  OAUTH: Fetcher
+  /** Service binding to collections.do */
+  COLLECTIONS: Fetcher
+  /** Worker loader for sandboxed execution */
+  LOADER?: unknown
   /** Enable debug logging */
   DEBUG?: string
 }
 
 /**
- * Create the MCP server with OAuth 2.1 support
+ * Create the worker app
  */
-export function createMCPServer(env: Env) {
+export function createWorkerApp(env: Env) {
   const app = new Hono<{ Bindings: Env }>()
   const debug = env.DEBUG === 'true'
 
-  // Determine OAuth configuration based on mode
-  const storage = new MemoryOAuthStorage()
-
-  let devMode: DevModeConfig | undefined
-  let upstream: { provider: 'workos'; apiKey: string; clientId: string } | undefined
-
-  if (env.MODE === 'test') {
-    // Test mode: no upstream, any credentials work
-    devMode = {
-      enabled: true,
-      allowAnyCredentials: true,
-      users: [
-        { id: 'test-user-1', email: 'test@test.mcp.do', password: 'test123', name: 'Test User' },
-        { id: 'test-user-2', email: 'alice@example.com', password: 'alice123', name: 'Alice' },
-        { id: 'test-user-3', email: 'bob@example.com', password: 'bob123', name: 'Bob' },
-      ],
-    }
-  } else if (env.MODE === 'dev') {
-    // Dev mode: WorkOS sandbox
-    if (!env.WORKOS_API_KEY || !env.WORKOS_CLIENT_ID) {
-      throw new Error('WORKOS_API_KEY and WORKOS_CLIENT_ID are required for dev mode')
-    }
-    upstream = {
-      provider: 'workos',
-      apiKey: env.WORKOS_API_KEY,
-      clientId: env.WORKOS_CLIENT_ID,
-    }
-  } else {
-    // Production mode: WorkOS production
-    if (!env.WORKOS_API_KEY || !env.WORKOS_CLIENT_ID) {
-      throw new Error('WORKOS_API_KEY and WORKOS_CLIENT_ID are required for production mode')
-    }
-    upstream = {
-      provider: 'workos',
-      apiKey: env.WORKOS_API_KEY,
-      clientId: env.WORKOS_CLIENT_ID,
-    }
+  // Auth configuration - use oauth.do for introspection
+  const authConfig: AuthConfig = {
+    mode: env.MODE === 'test' ? 'anon+auth' : 'auth-required',
+    oauth: {
+      introspectionUrl: env.OAUTH_INTROSPECTION_URL,
+    },
   }
 
-  // Create OAuth 2.1 server
-  const oauthServer = createOAuth21Server({
-    issuer: env.ISSUER,
-    storage,
-    devMode,
-    upstream,
-    debug,
-    enableDynamicRegistration: true,
-    scopes: ['openid', 'profile', 'email', 'mcp:read', 'mcp:write', 'mcp:admin'],
-  }) as OAuth21Server
+  // Create MCP server with tools
+  const mcpServer = createMCPServer({
+    // Search: Full-text search over collections
+    search: async (query, options) => {
+      // TODO: Implement FTS search over collections
+      // This would query a search index or scan collections
+      return { results: [], total: 0 }
+    },
+
+    // Fetch: Get resource by URL
+    fetch: async (id, options) => {
+      // id is a URL like https://myapp.collections.do/users/123
+      try {
+        const res = await env.COLLECTIONS.fetch(id)
+        if (!res.ok) return null
+        return res.json()
+      } catch {
+        return null
+      }
+    },
+
+    // Do: Execute TypeScript in a sandboxed environment
+    // Note: Collection bindings require capnweb integration (TODO)
+    do: {
+      types: `
+// Execute TypeScript/JavaScript code in a sandboxed environment
+// Standard JavaScript globals are available (Math, JSON, Date, etc.)
+// Network access is disabled by default
+
+// Example:
+// const result = [1, 2, 3].map(x => x * 2)
+// return result.reduce((a, b) => a + b, 0)
+`,
+      bindings: {},
+      timeout: 5000,
+    },
+    auth: authConfig,
+  }, {
+    name: 'collections.do',
+    version: '0.1.0',
+    env: env.LOADER ? { LOADER: env.LOADER } as any : undefined,
+  })
+
+  // Get the MCP HTTP handler
+  const mcpHandler = mcpServer.getHttpHandler()
 
   // Enable CORS for all routes
   app.use('*', cors({
     origin: '*',
-    allowMethods: ['GET', 'POST', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization'],
-    exposeHeaders: ['WWW-Authenticate'],
+    allowMethods: ['GET', 'POST', 'OPTIONS', 'DELETE'],
+    allowHeaders: ['Content-Type', 'Authorization', 'mcp-session-id'],
+    exposeHeaders: ['WWW-Authenticate', 'mcp-session-id'],
   }))
 
-  // Mount OAuth routes
-  app.route('/', oauthServer)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // OAuth Routes - Proxy to oauth.do
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  // Health check endpoint
+  app.get('/.well-known/oauth-authorization-server', async (c) => {
+    return c.env.OAUTH.fetch(c.req.raw)
+  })
+
+  app.get('/.well-known/oauth-protected-resource', async (c) => {
+    return c.env.OAUTH.fetch(c.req.raw)
+  })
+
+  app.get('/.well-known/jwks.json', async (c) => {
+    return c.env.OAUTH.fetch(c.req.raw)
+  })
+
+  app.get('/authorize', async (c) => {
+    return c.env.OAUTH.fetch(c.req.raw)
+  })
+
+  app.get('/login', async (c) => {
+    return c.env.OAUTH.fetch(c.req.raw)
+  })
+
+  app.post('/login', async (c) => {
+    return c.env.OAUTH.fetch(c.req.raw)
+  })
+
+  app.get('/callback', async (c) => {
+    return c.env.OAUTH.fetch(c.req.raw)
+  })
+
+  app.post('/token', async (c) => {
+    return c.env.OAUTH.fetch(c.req.raw)
+  })
+
+  app.post('/introspect', async (c) => {
+    return c.env.OAUTH.fetch(c.req.raw)
+  })
+
+  app.post('/revoke', async (c) => {
+    return c.env.OAUTH.fetch(c.req.raw)
+  })
+
+  app.post('/register', async (c) => {
+    return c.env.OAUTH.fetch(c.req.raw)
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Public Endpoints
+  // ═══════════════════════════════════════════════════════════════════════════
+
   app.get('/health', (c) => {
     return c.json({
       status: 'ok',
@@ -104,17 +161,16 @@ export function createMCPServer(env: Env) {
     })
   })
 
-  // Server info endpoint
   app.get('/', (c) => {
     return c.json({
-      name: 'MCP OAuth Server',
+      name: 'MCP Server',
       version: '0.1.0',
       mode: env.MODE,
       issuer: env.ISSUER,
       description: env.MODE === 'test'
-        ? 'Test server - any credentials accepted'
+        ? 'Test server - anonymous access allowed'
         : env.MODE === 'dev'
-        ? 'Development server - WorkOS sandbox'
+        ? 'Development server'
         : 'Production server',
       endpoints: {
         oauth: {
@@ -123,62 +179,36 @@ export function createMCPServer(env: Env) {
           token: '/token',
           register: '/register',
           revoke: '/revoke',
+          introspect: '/introspect',
         },
-        mcp: {
-          sse: '/mcp/sse',
-          messages: '/mcp/messages',
-        },
+        mcp: '/mcp',
         health: '/health',
       },
+      tools: mcpServer.getRegisteredTools(),
     })
   })
 
-  // MCP SSE endpoint (placeholder)
-  app.get('/mcp/sse', async (c) => {
-    // TODO: Implement MCP SSE streaming
-    return c.json({ error: 'MCP SSE not yet implemented' }, 501)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MCP Endpoint - Protected by auth, handled by mcp-lite
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  app.use('/mcp', authMiddleware(authConfig))
+
+  app.all('/mcp', async (c) => {
+    const authContext = c.get('authContext')
+    if (debug) {
+      console.log('[MCP] Request from:', authContext?.id || 'anonymous', 'method:', c.req.method)
+    }
+
+    return mcpHandler(c.req.raw)
   })
-
-  // MCP messages endpoint (placeholder)
-  app.post('/mcp/messages', async (c) => {
-    // TODO: Implement MCP message handling
-    return c.json({ error: 'MCP messages not yet implemented' }, 501)
-  })
-
-  // Test helpers endpoint (only in test mode)
-  if (env.MODE === 'test' && oauthServer.testHelpers) {
-    app.post('/test/token', async (c) => {
-      const body = await c.req.json<{ userId: string; clientId: string; scope?: string }>()
-      const tokens = await oauthServer.testHelpers!.getAccessToken(
-        body.userId,
-        body.clientId,
-        body.scope
-      )
-      return c.json(tokens)
-    })
-
-    app.post('/test/user', async (c) => {
-      const body = await c.req.json<{ id: string; email: string; name?: string; password?: string }>()
-      const user = await oauthServer.testHelpers!.createUser(body)
-      return c.json(user)
-    })
-  }
 
   return app
 }
 
-// Cache app instances per mode to persist storage across requests
-const appCache = new Map<string, Hono<{ Bindings: Env }>>()
-
-// Export default handler for Cloudflare Workers
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    // Use cached app if available (preserves in-memory storage within same instance)
-    let app = appCache.get(env.MODE)
-    if (!app) {
-      app = createMCPServer(env)
-      appCache.set(env.MODE, app)
-    }
+    const app = createWorkerApp(env)
     return app.fetch(request, env)
   },
 }

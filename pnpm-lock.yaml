@@ -79,6 +79,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^4.20260124.0
         version: 4.20260124.0
+      '@dotdo/types':
+        specifier: ^0.1.0
+        version: 0.1.1(typescript@5.9.3)
       esbuild:
         specifier: ^0.27.2
         version: 0.27.2
@@ -225,6 +228,15 @@ packages:
     resolution: {integrity: sha512-ArNVWzBnT39BXdiAq6b8OHXJpxdk6FS85m+2AcaxPLxhYxqr45A5lnUriEcI8BUqrcXsq4wh6Ayiyo2vd9v9Ag==}
     peerDependencies:
       hono: '>=4.0.0'
+
+  '@dotdo/types@0.1.1':
+    resolution: {integrity: sha512-7khQZk/+aJpzudoFojJiYt01QVjXmBkzwbOZFVgBn2ZPtH8l2/GonQViFsk8tuczthcxV1yzRSp1atI0Vc5XKw==}
+    hasBin: true
+    peerDependencies:
+      typescript: '>=5.0.0'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
   '@emnapi/runtime@1.8.1':
     resolution: {integrity: sha512-mehfKSMWjjNol8659Z8KxEMrdSJDDot5SXMq00dM8BN4o+CLNXQ0xH2V7EchNHV4RmbZLmmPdEaXZc5H2FXmDg==}
@@ -2876,6 +2888,10 @@ snapshots:
   '@dotdo/oauth@0.1.5(hono@4.11.5)':
     dependencies:
       hono: 4.11.5
+
+  '@dotdo/types@0.1.1(typescript@5.9.3)':
+    optionalDependencies:
+      typescript: 5.9.3
 
   '@emnapi/runtime@1.8.1':
     dependencies:

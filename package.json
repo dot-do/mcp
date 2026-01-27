@@ -1,6 +1,6 @@
 {
   "name": "mcp.do",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP managed service - deploy MCP servers with search, fetch, and do primitives",
   "type": "module",
   "main": "./dist/index.js",

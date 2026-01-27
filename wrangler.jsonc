@@ -6,6 +6,14 @@
   "compatibility_date": "2026-01-01",
   "compatibility_flags": ["nodejs_compat"],
 
+  // Migration to delete old Durable Object classes
+  "migrations": [
+    {
+      "tag": "v8",
+      "deleted_classes": ["PublicMcpAgent", "RateLimiter"]
+    }
+  ],
+
   // Dynamic Worker Loader for ai-evaluate sandboxed execution
   "worker_loaders": [
     {
@@ -13,10 +21,23 @@
     }
   ],
 
+  // Service bindings
+  "services": [
+    {
+      "binding": "OAUTH",
+      "service": "oauth"
+    },
+    {
+      "binding": "COLLECTIONS",
+      "service": "collections-do"
+    }
+  ],
+
   // Default environment variables
   "vars": {
     "MODE": "test",
-    "ISSUER": "https://test.mcp.do",
+    "ISSUER": "https://oauth.do",
+    "OAUTH_INTROSPECTION_URL": "https://oauth.do/introspect",
     "DEBUG": "true"
   },
 
@@ -34,13 +55,14 @@
   },
 
   // --- Test Environment - test.mcp.do ---
-  // No upstream OAuth, any credentials work
+  // Uses oauth.do for auth (test mode with dev mode users)
   "env": {
     "test": {
       "name": "mcp-test",
       "vars": {
         "MODE": "test",
-        "ISSUER": "https://test.mcp.do",
+        "ISSUER": "https://oauth.do",
+        "OAUTH_INTROSPECTION_URL": "https://oauth.do/introspect",
         "DEBUG": "true"
       },
       "routes": [
@@ -52,12 +74,13 @@
     },
 
     // --- Dev Environment - dev.mcp.do ---
-    // WorkOS sandbox for real auth testing
+    // Uses oauth.do for auth
     "dev": {
       "name": "mcp-dev",
       "vars": {
         "MODE": "dev",
-        "ISSUER": "https://dev.mcp.do",
+        "ISSUER": "https://oauth.do",
+        "OAUTH_INTROSPECTION_URL": "https://oauth.do/introspect",
         "DEBUG": "true"
       },
       "routes": [
@@ -66,16 +89,16 @@
           "custom_domain": true
         }
       ]
-      // WORKOS_API_KEY and WORKOS_CLIENT_ID should be set via wrangler secret
     },
 
     // --- Production Environment - mcp.do ---
-    // WorkOS production for live traffic
+    // Uses oauth.do for auth
     "production": {
       "name": "mcp-production",
       "vars": {
         "MODE": "production",
-        "ISSUER": "https://mcp.do",
+        "ISSUER": "https://oauth.do",
+        "OAUTH_INTROSPECTION_URL": "https://oauth.do/introspect",
         "DEBUG": "false"
       },
       "routes": [
@@ -84,7 +107,6 @@
           "custom_domain": true
         }
       ]
-      // WORKOS_API_KEY and WORKOS_CLIENT_ID should be set via wrangler secret
     }
   }
 }

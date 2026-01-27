@@ -23,6 +23,7 @@ export interface DoScope {
   /**
    * Bindings to inject into the sandbox.
    * Keys are the names used in the sandbox, values are the functions/objects.
+   * For per-request bindings, use MCPServerWrapper.setRequestBindings() before handling requests.
    */
   bindings: Record<string, unknown>
 

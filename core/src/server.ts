@@ -155,6 +155,14 @@ export interface MCPServerWrapper {
   callTool(name: string, args: Record<string, unknown>): Promise<unknown>
   /** Get the authentication configuration */
   getAuthConfig(): AuthConfig | undefined
+  /**
+   * Set request-scoped bindings for the do tool.
+   * Call this before handling each request to provide per-request bindings.
+   * These bindings are merged with static bindings (request bindings take precedence).
+   */
+  setRequestBindings(bindings: Record<string, unknown>): void
+  /** Clear request-scoped bindings after handling a request */
+  clearRequestBindings(): void
 }
 
 /**
@@ -170,6 +178,9 @@ export function createMCPServer(
 ): MCPServerWrapper {
   const { name = 'mcp-server', version = '0.1.0', env: sandboxEnv } = options
   const { search, fetch, do: doScope, auth: authConfig } = config
+
+  // Request-scoped bindings storage (set per-request, cleared after)
+  let requestBindings: Record<string, unknown> = {}
 
   // Create the McpServer instance with Valibot schema adapter
   const mcpServer = new McpServer({
@@ -263,11 +274,15 @@ ${doScope.types}`,
       try {
         // Get the evaluate function (Workers version)
         const evaluate = await getEvaluate()
+
+        // Build bindings - start with static, add request-scoped bindings (takes precedence)
+        const bindings = { ...doScope.bindings, ...requestBindings }
+
         const result = await evaluate({
           script: validatedArgs.code,
           timeout: doScope.timeout,
           fetch: doScope.permissions?.allowNetwork ? undefined : null,
-          rpc: doScope.bindings, // Pass domain bindings via RPC
+          rpc: bindings, // Pass merged bindings via RPC
         }, sandboxEnv)
 
         const duration = Date.now() - startTime
@@ -312,7 +327,7 @@ ${doScope.types}`,
         script: validatedArgs.code,
         timeout: doScope.timeout,
         fetch: doScope.permissions?.allowNetwork ? undefined : null,
-        rpc: doScope.bindings,
+        rpc: doScope.bindings, // Direct handler uses static bindings only
       }, sandboxEnv)
 
       const duration = Date.now() - startTime
@@ -351,6 +366,14 @@ ${doScope.types}`,
 
     getAuthConfig(): AuthConfig | undefined {
       return authConfig
+    },
+
+    setRequestBindings(bindings: Record<string, unknown>): void {
+      requestBindings = bindings
+    },
+
+    clearRequestBindings(): void {
+      requestBindings = {}
     },
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@dotdo/mcp",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "MCP Server library with search, fetch, and do primitives - the core package for building MCP servers",
   "type": "module",
   "main": "./dist/index.js",
@@ -78,11 +78,18 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.8.0",
     "@cloudflare/workers-types": "^4.20260124.0",
+    "@dotdo/types": "^0.1.0",
     "esbuild": "^0.27.2",
     "typescript": "^5.9.3",
     "vitest": "^2.0.0"
   },
   "peerDependencies": {
+    "@dotdo/types": ">=0.1.0",
     "hono": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@dotdo/types": {
+      "optional": true
+    }
   }
 }
