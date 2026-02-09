@@ -4,6 +4,12 @@
  * Routes OAuth requests to oauth.do and provides MCP protocol endpoints.
  * Uses oauth.do as the centralized OAuth 2.1 authorization server.
  * Extends WorkerEntrypoint for RPC support.
+ *
+ * Service communication:
+ * - COLLECTIONS: Workers RPC for all data operations (get/put/delete/list/find/count)
+ * - OAUTH: Workers RPC for token introspection; HTTP fetch for OAuth flow proxying
+ *   (authorize, token, register, login, callback, etc. require full HTTP pass-through
+ *   because they involve redirects, HTML pages, and form submissions)
  */
 
 import { WorkerEntrypoint } from 'cloudflare:workers'
@@ -14,11 +20,11 @@ import { createMCPServer } from '@dotdo/mcp'
 import type { AuthConfig } from '@dotdo/mcp/auth'
 
 /**
- * Service binding interface for collections.do with RPC methods
+ * Service binding interface for collections.do — RPC only
+ *
+ * All data operations use Workers RPC. No HTTP fetch needed.
  */
 interface CollectionsService {
-  fetch(request: Request): Promise<Response>
-  // RPC methods exposed by collections.do
   get(collection: string, id: string): Promise<Record<string, unknown> | null>
   put(collection: string, id: string, doc: Record<string, unknown>): Promise<Record<string, unknown>>
   delete(collection: string, id: string): Promise<boolean>
@@ -28,9 +34,16 @@ interface CollectionsService {
 }
 
 /**
- * OAuth service binding with RPC methods
+ * OAuth service binding — RPC for introspection, HTTP fetch for OAuth flow proxying
+ *
+ * OAuth flow routes (authorize, token, login, callback, register, revoke, etc.)
+ * must use HTTP fetch because they involve redirects, HTML responses, cookies,
+ * and form submissions that cannot be expressed as simple RPC calls.
+ *
+ * Token introspection uses RPC for zero-overhead validation.
  */
 interface OAuthService {
+  /** HTTP fetch handler — required for OAuth flow proxying */
   fetch(request: Request): Promise<Response>
   /** Introspect a token via Workers RPC */
   introspect(token: string): Promise<{
@@ -44,6 +57,15 @@ interface OAuthService {
     aud?: string | string[]
     [key: string]: unknown
   }>
+  /** Validate a WorkOS API key via Workers RPC */
+  validateApiKey(apiKey: string): Promise<{
+    valid: boolean
+    id?: string
+    name?: string
+    organization_id?: string
+    permissions?: string[]
+    error?: string
+  }>
 }
 
 /**
@@ -52,9 +74,9 @@ interface OAuthService {
 export interface Env {
   /** Server mode: 'test' | 'dev' | 'production' */
   MODE: 'test' | 'dev' | 'production'
-  /** Service binding to oauth.do with RPC support */
+  /** Service binding to oauth.do — RPC + HTTP fetch */
   OAUTH: OAuthService
-  /** Service binding to collections.do with RPC support */
+  /** Service binding to collections.do — RPC only */
   COLLECTIONS: CollectionsService
   /** Worker loader for sandboxed execution */
   LOADER?: unknown
@@ -98,13 +120,23 @@ export default class MCPWorker extends WorkerEntrypoint<Env> {
         return { results: [], total: 0 }
       },
 
-      // Fetch: Get resource by URL
+      // Fetch: Get resource by URL via Workers RPC
       fetch: async (id, options) => {
         // id is a URL like https://myapp.collections.do/users/123
+        // Parse the URL to extract collection and document ID for RPC
         try {
-          const res = await env.COLLECTIONS.fetch(new Request(id))
-          if (!res.ok) return null
-          return res.json()
+          const url = new URL(id)
+          const parts = url.pathname.split('/').filter(Boolean)
+          if (parts.length < 2) {
+            // Single segment — treat as collection list
+            const collection = parts[0]
+            if (!collection) return null
+            const items = await env.COLLECTIONS.list(collection, { limit: 1 })
+            return items[0] ?? null
+          }
+          const collection = parts[0]!
+          const docId = parts.slice(1).join('/')
+          return await env.COLLECTIONS.get(collection, docId)
         } catch {
           return null
         }
@@ -171,7 +203,18 @@ globalThis.collection = function collection(name) {
     }))
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // OAuth Routes - Proxy to oauth.do
+    // OAuth Routes - Proxy to oauth.do via HTTP fetch
+    //
+    // These routes MUST use HTTP fetch (not RPC) because they proxy full
+    // OAuth 2.1 flows that involve:
+    //   - HTTP redirects (302) for authorization
+    //   - HTML page responses (login, consent, device)
+    //   - Cookie handling (session cookies)
+    //   - Form submissions (POST with URL-encoded bodies)
+    //   - JSON discovery documents (.well-known)
+    //
+    // The OAuth worker's RPC methods (introspect, validateApiKey) are used
+    // directly where applicable — see authMiddleware config above.
     // ═══════════════════════════════════════════════════════════════════════════
 
     app.get('/.well-known/oauth-authorization-server', async (c) => {
