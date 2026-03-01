@@ -20,3 +20,7 @@ export * from './tools/index.js'
 
 // Scope
 export * from './scope/index.js'
+
+// Node.js sandbox (for non-Cloudflare environments)
+export { evaluateNode, createNodeEvaluator } from './sandbox-node.js'
+export type { NodeEvaluateOptions } from './sandbox-node.js'

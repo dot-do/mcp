@@ -26,6 +26,14 @@
     "./auth": {
       "types": "./dist/auth/index.d.ts",
       "import": "./dist/auth/index.js"
+    },
+    "./sandbox": {
+      "types": "./dist/sandbox.d.ts",
+      "import": "./dist/sandbox.js"
+    },
+    "./sandbox-node": {
+      "types": "./dist/sandbox-node.d.ts",
+      "import": "./dist/sandbox-node.js"
     }
   },
   "files": [
